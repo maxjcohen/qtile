@@ -79,8 +79,23 @@ keys = [
         desc="Spawn a command using a prompt widget"),
 ]
 
-group_names = ["", "", "", "TRM", "BRO", "ELS"]
-groups = list(map(Group, group_names))
+groups_def = [
+    {
+        "name": "term",
+        "label": "",
+    },
+    {
+        "name": "firefox",
+        "label": "",
+        "matches": [Match(wm_class=["firefox", "vimb"])],
+    },
+    {
+        "name": "slack",
+        "label": "",
+        "matches": [Match(wm_class=["Slack"])],
+    },
+]
+groups = [Group(**group_def) for group_def in groups_def]
 
 for group_idx, group in enumerate(groups):
     keys.extend([
