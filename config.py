@@ -123,6 +123,8 @@ extension_defaults = widget_defaults.copy()
 
 screens = [
     Screen(
+        wallpaper="~/.local/share/backgrounds/the-midnight-gospel-wallpaper.jpeg",
+        wallpaper_mode="fill",
         bottom=bar.Bar(
             [
                 widget.CurrentLayout(),
