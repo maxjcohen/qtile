@@ -8,6 +8,7 @@ MANIFEST
 /build
 /dist
 /env
+.env
 # complied cffi output
 libqtile/_ffi_pango.py
 libqtile/backend/x11/_ffi_xcursors.py
