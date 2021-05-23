@@ -33,6 +33,7 @@ from libqtile.layout.ratiotile import RatioTile
 from libqtile.layout.slice import Slice
 from libqtile.layout.stack import Stack
 from libqtile.layout.tile import Tile
+from libqtile.layout.tilesingle import TileSingle
 from libqtile.layout.tree import TreeTab
 from libqtile.layout.verticaltile import VerticalTile
 from libqtile.layout.xmonad import MonadTall, MonadWide
