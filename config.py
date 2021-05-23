@@ -98,6 +98,7 @@ for group_idx, group in enumerate(groups):
     ])
 
 layouts = [
+    layout.TileSingle(),
     # layout.Columns(border_focus_stack='#d75f5f'),
     layout.Max(),
     # Try more layouts by unleashing below layouts.
@@ -111,7 +112,6 @@ layouts = [
     # layout.TreeTab(),
     # layout.VerticalTile(),
     # layout.Zoomy(),
-    layout.TileSingle(),
 ]
 
 widget_defaults = dict(
