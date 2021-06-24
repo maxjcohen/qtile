@@ -157,8 +157,8 @@ screens = [
         wallpaper_mode="fill",
         bottom=bar.Bar(
             [
-                widget.CurrentLayout(),
                 widget.GroupBox(),
+                widget.CurrentLayout(),
                 widget.Prompt(),
                 widget.WindowName(),
                 widget.Chord(
