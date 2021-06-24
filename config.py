@@ -91,6 +91,11 @@ groups_def = [
         "matches": [Match(wm_class=["firefox", "vimb"])],
     },
     {
+        "name": "zathura",
+        "label": "ZAT",
+        "matches": [Match(wm_class=["zathura"])],
+    },
+    {
         "name": "slack",
         "label": "",
         "matches": [Match(wm_class=["Slack"])],
