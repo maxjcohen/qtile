@@ -83,6 +83,7 @@ widgets = {
     "TextBox": "textbox",
     "ThermalSensor": "sensors",
     "Volume": "volume",
+    "VolumePulse": "volume_pulse",
     "Wallpaper": "wallpaper",
     "WidgetBox": "widgetbox",
     "WindowCount": "window_count",
