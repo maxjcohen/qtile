@@ -30,6 +30,15 @@ from libqtile import bar, layout, widget
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
 
+COLOR_BG_BAR = "#4c566a"
+
+_widget_defaults = {
+    "padding": 10,
+    "background": None,
+    "fontsize": 15,
+    "font": "Source Code Pro Semibold",
+}
+
 mod = "mod1"  # See "xmodmap" for a list a modifiers available
 terminal = "alacritty"
 
@@ -167,15 +176,39 @@ screens = [
                     },
                     name_transform=lambda name: name.upper(),
                 ),
-                Setwidget.Systray(),
-                widget.Clock(
-                    format="%A %d-%m-%Y %H:%M",
-                    foreground="#d75f5f",
-                    background="#2e3440",
+                widget.Systray(),
+                widget.Backlight(backlight_name="intel_backlight"),
+                widget.Battery(),
+                widget.BatteryIcon(),
+                widget.CPU(),
+                widget.CheckUpdates(),
+                widget.Memory(
+                    **_widget_defaults
                 ),
-                widget.QuickExit(),
+                widget.VolumePulse(
+                    foreground="#d08770",
+                    **_widget_defaults
+                ),
+                widget.KeyboardLayout(
+                    fmt=" {}",
+                    foreground="#5e81ac",
+                    **_widget_defaults
+                ),
+                widget.Clock(
+                    format="%a, %d %b",
+                    fmt=" {}",
+                    foreground="#a3be8c",
+                    **_widget_defaults
+                ),
+                widget.Clock(
+                    format="%H:%M",
+                    fmt=" {}",
+                    foreground="#88c0d0",
+                    **_widget_defaults
+                ),
             ],
             24,
+            background=COLOR_BG_BAR,
         ),
     ),
 ]
