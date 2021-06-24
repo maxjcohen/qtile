@@ -167,8 +167,7 @@ screens = [
                     },
                     name_transform=lambda name: name.upper(),
                 ),
-                widget.TextBox("Press Alt-p to spawn", foreground="#d75f5f"),
-                widget.Systray(),
+                Setwidget.Systray(),
                 widget.Clock(
                     format="%A %d-%m-%Y %H:%M",
                     foreground="#d75f5f",
