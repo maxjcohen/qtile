@@ -44,14 +44,17 @@ class VolumePulse(base._TextBox):
         super().__init__("0", width=bar.CALCULATED, **config)
         self.add_defaults(self.defaults)
         self.volume = None
+        self.mute = None
 
     def timer_setup(self):
         self.timeout_add(self.update_interval, self.update)
 
     def update(self):
         vol = self.get_volume()
-        if vol != self.volume:
+        mute = self.get_mute()
+        if vol != self.volume or mute != self.mute:
             self.volume = vol
+            self.mute = mute
             # Update the underlying canvas size before actually attempting
             # to figure out how big it is and draw it.
             self._update_drawer()
@@ -62,8 +65,14 @@ class VolumePulse(base._TextBox):
         get_volume_cmd = ["pulsemixer", "--get-volume"]
         return int(self.call_process(get_volume_cmd).split()[0])
 
+    def get_mute(self):
+        get_mute_cmd = ["pulsemixer", "--get-mute"]
+        return int(self.call_process(get_mute_cmd))
+
     def _update_drawer(self):
-        if self.volume >= 66:
+        if self.mute:
+            icon = ""
+        elif self.volume >= 66:
             icon = ""
         elif self.volume > 0:
             icon = ""
