@@ -28,6 +28,7 @@ widgets = {
     "Backlight": "backlight",
     "Battery": "battery",
     "BatteryIcon": "battery",
+    "BatteryHybrid": "battery",
     "BitcoinTicker": "bitcoin_ticker",
     "Bluetooth": "bluetooth",
     "CPU": "cpu",

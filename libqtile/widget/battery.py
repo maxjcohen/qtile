@@ -304,6 +304,56 @@ class _LinuxBattery(_Battery, configurable.Configurable):
         return BatteryStatus(state=state, percent=percent, power=power, time=time)
 
 
+class BatteryHybrid(base._TextBox):
+    defaults = [
+        ("update_interval", 10, "Update time in seconds."),
+    ]
+    def __init__(self, **config):
+        super().__init__(**config)
+        self.add_defaults(self.defaults)
+
+        self._battery = self._load_battery()
+
+    def timer_setup(self):
+        self.timeout_add(0.1, self.update)
+
+    @staticmethod
+    def _load_battery(**config):
+        """Function used to load the Battery object
+
+        Battery behavior can be changed by overloading this function in a base
+        class.
+        """
+        return load_battery(**config)
+
+    def update(self):
+        # Get battery status
+        status = self._battery.update_status()
+
+        # Update widget content and draw
+        self._update_drawer(status)
+        self.bar.draw()
+
+        # Set timeout
+        self.timeout_add(self.update_interval, self.update)
+
+    def _update_drawer(self, status):
+        if status.state == BatteryState.CHARGING:
+            battery_icon=""
+        if status.percent > 0.90:
+            battery_icon=""
+        elif status.percent > 0.75:
+            battery_icon=""
+        elif status.percent > 0.50:
+            battery_icon=""
+        elif status.percent > 0.25:
+            battery_icon=""
+        else:
+            battery_icon=""
+
+        self.text = f"{battery_icon} {int(status.percent*100)}%"
+
+
 class Battery(base.ThreadPoolText):
     """A text-based battery monitoring widget currently supporting FreeBSD"""
     orientations = base.ORIENTATION_HORIZONTAL

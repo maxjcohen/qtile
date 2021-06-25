@@ -178,11 +178,13 @@ screens = [
                 ),
                 widget.Systray(),
                 widget.Backlight(backlight_name="intel_backlight"),
-                widget.Battery(),
-                widget.BatteryIcon(),
                 widget.CPU(),
                 widget.CheckUpdates(),
                 widget.Memory(
+                    **_widget_defaults
+                ),
+                widget.BatteryHybrid(
+                    foreground="#88c0d0",
                     **_widget_defaults
                 ),
                 widget.VolumePulse(
