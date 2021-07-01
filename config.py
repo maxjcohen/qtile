@@ -181,6 +181,9 @@ screens = [
                 widget.CPU(),
                 widget.CheckUpdates(),
                 widget.Memory(
+                    format=" {MemPercent:.0f}%",
+                    update_interval=3.0,
+                    foreground="#b48ead",
                     **_widget_defaults
                 ),
                 widget.Wifi(
