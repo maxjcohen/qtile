@@ -17,21 +17,10 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-import re
-import subprocess
-
-from libqtile import bar
 from libqtile.widget import base
 
-__all__ = [
-    "Volume",
-]
 
-re_vol = re.compile(r"\[(\d?\d?\d?)%\]")
-
-
-class VolumePulse(base._TextBox):
+class VolumePulse(base.ThreadPoolText):
     """Widget that display and change volume based on pulsemixer"""
 
     orientations = base.ORIENTATION_HORIZONTAL
@@ -41,25 +30,8 @@ class VolumePulse(base._TextBox):
     ]
 
     def __init__(self, **config):
-        super().__init__("0", width=bar.CALCULATED, **config)
+        super().__init__("", **config)
         self.add_defaults(self.defaults)
-        self.volume = None
-        self.mute = None
-
-    def timer_setup(self):
-        self.timeout_add(self.update_interval, self.update)
-
-    def update(self):
-        vol = self.get_volume()
-        mute = self.get_mute()
-        if vol != self.volume or mute != self.mute:
-            self.volume = vol
-            self.mute = mute
-            # Update the underlying canvas size before actually attempting
-            # to figure out how big it is and draw it.
-            self._update_drawer()
-            self.bar.draw()
-        self.timeout_add(self.update_interval, self.update)
 
     def get_volume(self):
         get_volume_cmd = ["pulsemixer", "--get-volume"]
@@ -69,14 +41,16 @@ class VolumePulse(base._TextBox):
         get_mute_cmd = ["pulsemixer", "--get-mute"]
         return int(self.call_process(get_mute_cmd))
 
-    def _update_drawer(self):
-        if self.mute:
+    def poll(self):
+        mute = self.get_mute()
+        volume = self.get_volume()
+        if mute:
             icon = ""
-        elif self.volume >= 66:
+        elif volume >= 66:
             icon = ""
-        elif self.volume > 0:
+        elif volume > 0:
             icon = ""
         else:
             icon = ""
 
-        self.text = f"{icon} {self.volume}%"
+        return f"{icon} {volume}%"

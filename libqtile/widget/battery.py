@@ -304,18 +304,15 @@ class _LinuxBattery(_Battery, configurable.Configurable):
         return BatteryStatus(state=state, percent=percent, power=power, time=time)
 
 
-class BatteryHybrid(base._TextBox):
+class BatteryHybrid(base.ThreadPoolText):
     defaults = [
         ("update_interval", 10, "Update time in seconds."),
     ]
     def __init__(self, **config):
-        super().__init__(**config)
+        super().__init__("", **config)
         self.add_defaults(self.defaults)
 
         self._battery = self._load_battery()
-
-    def timer_setup(self):
-        self.timeout_add(0.1, self.update)
 
     @staticmethod
     def _load_battery(**config):
@@ -326,18 +323,10 @@ class BatteryHybrid(base._TextBox):
         """
         return load_battery(**config)
 
-    def update(self):
+    def poll(self) -> str:
         # Get battery status
         status = self._battery.update_status()
 
-        # Update widget content and draw
-        self._update_drawer(status)
-        self.bar.draw()
-
-        # Set timeout
-        self.timeout_add(self.update_interval, self.update)
-
-    def _update_drawer(self, status):
         if status.state == BatteryState.CHARGING:
             battery_icon=""
         elif status.percent > 0.90:
@@ -351,7 +340,7 @@ class BatteryHybrid(base._TextBox):
         else:
             battery_icon=""
 
-        self.text = f"{battery_icon} {int(status.percent*100)}%"
+        return f"{battery_icon} {int(status.percent*100)}%"
 
 
 class Battery(base.ThreadPoolText):
