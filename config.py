@@ -183,6 +183,11 @@ screens = [
                 widget.Memory(
                     **_widget_defaults
                 ),
+                widget.Wifi(
+                    fmt=" {}",
+                    foreground="#d08770",
+                    **_widget_defaults
+                ),
                 widget.BatteryHybrid(
                     foreground="#88c0d0",
                     **_widget_defaults

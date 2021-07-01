@@ -87,6 +87,7 @@ widgets = {
     "VolumePulse": "volume_pulse",
     "Wallpaper": "wallpaper",
     "WidgetBox": "widgetbox",
+    "Wifi": "wifi",
     "WindowCount": "window_count",
     "WindowName": "windowname",
     "WindowTabs": "windowtabs",
