@@ -340,7 +340,7 @@ class BatteryHybrid(base._TextBox):
     def _update_drawer(self, status):
         if status.state == BatteryState.CHARGING:
             battery_icon=""
-        if status.percent > 0.90:
+        elif status.percent > 0.90:
             battery_icon=""
         elif status.percent > 0.75:
             battery_icon=""
