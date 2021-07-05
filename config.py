@@ -177,9 +177,18 @@ screens = [
                     name_transform=lambda name: name.upper(),
                 ),
                 widget.Systray(),
-                widget.Backlight(backlight_name="intel_backlight"),
-                widget.CPU(),
-                widget.CheckUpdates(),
+                widget.Backlight(
+                    backlight_name="intel_backlight",
+                    format=" {percent:2.0%}",
+                    foreground="#d08770",
+                    **_widget_defaults
+                ),
+                widget.CPU(
+                    format=" {load_percent:.0f}%",
+                    update_interval=3.0,
+                    foreground="#a3be8c",
+                    **_widget_defaults
+                ),
                 widget.Memory(
                     format=" {MemPercent:.0f}%",
                     update_interval=3.0,
