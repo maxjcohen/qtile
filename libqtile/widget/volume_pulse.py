@@ -17,6 +17,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+from libqtile import qtile
 from libqtile.widget import base
 
 
@@ -32,6 +33,10 @@ class VolumePulse(base.ThreadPoolText):
     def __init__(self, **config):
         super().__init__("", **config)
         self.add_defaults(self.defaults)
+
+        self.add_callbacks({
+            'Button1': lambda: qtile.cmd_spawn('st -e pulsemixer'),
+        })
 
     def get_volume(self):
         get_volume_cmd = ["pulsemixer", "--get-volume"]
