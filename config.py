@@ -177,15 +177,12 @@ screens = [
                     foreground="#88c0d0",
                     **_widget_defaults
                 ),
-                widget.Prompt(),
-                widget.WindowName(),
-                widget.Chord(
-                    chords_colors={
-                        "launch": ("#ff0000", "#ffffff"),
-                    },
-                    name_transform=lambda name: name.upper(),
+                widget.Prompt(
+                    **_widget_defaults
                 ),
-                widget.Systray(),
+                widget.WindowName(
+                    **_widget_defaults
+                ),
                 widget.Net(
                     format="{down}{up}",
                     update_interval=3.0,
