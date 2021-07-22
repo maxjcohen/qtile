@@ -152,6 +152,11 @@ layouts = [
     # layout.VerticalTile(),
     # layout.Zoomy(),
 ]
+layouts_icons = {
+    "tilesingle": "",
+    "max": "",
+    "float": "",
+}
 
 widget_defaults = dict(
     font="sans",
@@ -167,7 +172,11 @@ screens = [
         bottom=bar.Bar(
             [
                 widget.GroupBox(),
-                widget.CurrentLayout(),
+                widget.CurrentLayout(
+                    layouts_icons=layouts_icons,
+                    foreground="#88c0d0",
+                    **_widget_defaults
+                ),
                 widget.Prompt(),
                 widget.WindowName(),
                 widget.Chord(

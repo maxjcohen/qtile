@@ -41,12 +41,17 @@ class CurrentLayout(base._TextBox):
     """
     orientations = base.ORIENTATION_HORIZONTAL
 
-    def __init__(self, width=bar.CALCULATED, **config):
-        base._TextBox.__init__(self, "", width, **config)
+    def __init__(self, width=bar.CALCULATED, layouts_icons:dict=None, **config):
+        super().__init__("", width, **config)
+        self.layouts_icons = layouts_icons or {}
 
     def _configure(self, qtile, bar):
         base._TextBox._configure(self, qtile, bar)
         self.text = self.bar.screen.group.layouts[0].name
+        try:
+            self.text = self.layouts_icons[self.text]
+        except KeyError:
+            pass
         self.setup_hooks()
 
         self.add_callbacks({
@@ -57,7 +62,10 @@ class CurrentLayout(base._TextBox):
     def setup_hooks(self):
         def hook_response(layout, group):
             if group.screen is not None and group.screen == self.bar.screen:
-                self.text = layout.name
+                try:
+                    self.text = self.layouts_icons[layout.name]
+                except KeyError:
+                    self.text = layout.name
                 self.bar.draw()
         hook.subscribe.layout_change(hook_response)
 
