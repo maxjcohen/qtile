@@ -177,6 +177,12 @@ screens = [
                     name_transform=lambda name: name.upper(),
                 ),
                 widget.Systray(),
+                widget.Net(
+                    format="{down}{up}",
+                    update_interval=3.0,
+                    foreground="#b48ead",
+                    **_widget_defaults
+                ),
                 widget.Backlight(
                     backlight_name="intel_backlight",
                     format=" {percent:2.0%}",
