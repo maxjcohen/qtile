@@ -41,6 +41,7 @@ widgets = {
     "Clock": "clock",
     "Cmus": "cmus",
     "Countdown": "countdown",
+    "CryptoTicker": "crypto_ticker",
     "CurrentLayout": "currentlayout",
     "CurrentLayoutIcon": "currentlayout",
     "CurrentScreen": "currentscreen",

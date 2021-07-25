@@ -33,11 +33,10 @@ from __future__ import annotations
 import contextlib
 import os.path
 import sys
-import warnings
 from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
 from libqtile import configurable, hook, utils
-from libqtile.backend.x11 import window
+from libqtile.backend import base
 from libqtile.bar import BarType
 from libqtile.command.base import CommandObject, ItemT
 
@@ -103,7 +102,6 @@ class KeyChord:
 
 class Mouse:
     def __init__(self, modifiers: List[str], button: str, *commands, **kwargs):
-        self.focus = kwargs.pop("focus", "before")
         self.modifiers = modifiers
         self.button = button
         self.commands = commands
@@ -117,10 +115,7 @@ class Drag(Mouse):
     """Defines binding of a mouse to some dragging action
 
     On each motion event command is executed with two extra parameters added x
-    and y offset from previous move
-
-    It focuses clicked window by default.  If you want to prevent it pass,
-    `focus=None` as an argument
+    and y offset from previous move.
     """
     def __init__(self, *args, start=False, **kwargs):
         super().__init__(*args, **kwargs)
@@ -131,11 +126,7 @@ class Drag(Mouse):
 
 
 class Click(Mouse):
-    """Defines binding of a mouse click
-
-    It focuses clicked window by default.  If you want to prevent it, pass
-    `focus=None` as an argument
-    """
+    """Defines binding of a mouse click"""
     def __repr__(self):
         return "<Click (%s, %s)>" % (self.modifiers, self.button)
 
@@ -264,13 +255,15 @@ class Screen(CommandObject):
     resized to fill it. If the mode is 'stretch', the image is stretched to fit all of
     it into the screen.
     """
+    group: _Group
+    previous_group: _Group
+    index: int
+
     def __init__(self, top: Optional[BarType] = None, bottom: Optional[BarType] = None,
                  left: Optional[BarType] = None, right: Optional[BarType] = None,
                  wallpaper: Optional[str] = None, wallpaper_mode: Optional[str] = None,
                  x: Optional[int] = None, y: Optional[int] = None, width: Optional[int] = None,
                  height: Optional[int] = None):
-        self.group: Optional[_Group] = None
-        self.previous_group: Optional[_Group] = None
 
         self.top = top
         self.bottom = bottom
@@ -279,13 +272,12 @@ class Screen(CommandObject):
         self.wallpaper = wallpaper
         self.wallpaper_mode = wallpaper_mode
         self.qtile = None
-        self.index = None
         # x position of upper left corner can be > 0
         # if one screen is "right" of the other
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
+        self.x = x if x is not None else 0
+        self.y = y if y is not None else 0
+        self.width = width if width is not None else 0
+        self.height = height if height is not None else 0
 
     def _configure(self, qtile, index, x, y, width, height, group):
         self.qtile = qtile
@@ -337,7 +329,7 @@ class Screen(CommandObject):
     def get_rect(self):
         return ScreenRect(self.dx, self.dy, self.dwidth, self.dheight)
 
-    def set_group(self, new_group, save_prev=True):
+    def set_group(self, new_group, save_prev=True, warp=True):
         """Put group on this screen"""
         if new_group is None:
             return
@@ -345,7 +337,7 @@ class Screen(CommandObject):
         if new_group.screen == self:
             return
 
-        if save_prev:
+        if save_prev and hasattr(self, "group"):
             self.previous_group = self.group
 
         if new_group.screen:
@@ -359,24 +351,24 @@ class Screen(CommandObject):
             s2 = new_group.screen
 
             s2.group = g1
-            g1._set_screen(s2)
+            g1.set_screen(s2, warp)
             s1.group = g2
-            g2._set_screen(s1)
+            g2.set_screen(s1, warp)
         else:
-            old_group = self.group
-            self.group = new_group
-
-            if old_group is None:
-                ctx = contextlib.nullcontext()
-            else:
+            if hasattr(self, "group"):
+                old_group = self.group
                 ctx = self.qtile.core.masked()
+            else:
+                old_group = None
+                ctx = contextlib.nullcontext()
+            self.group = new_group
             with ctx:
                 # display clients of the new group and then hide from old group
                 # to remove the screen flickering
-                new_group._set_screen(self)
+                new_group.set_screen(self, warp)
 
                 if old_group is not None:
-                    old_group._set_screen(None)
+                    old_group.set_screen(None, warp)
 
         hook.fire("setgroup")
         hook.fire("focus_change")
@@ -384,11 +376,11 @@ class Screen(CommandObject):
                   self.group.layouts[self.group.current_layout],
                   self.group)
 
-    def toggle_group(self, group=None):
+    def toggle_group(self, group=None, warp=True):
         """Switch to the selected group or to the previously active one"""
-        if group in (self.group, None):
+        if group in (self.group, None) and hasattr(self, "previous_group"):
             group = self.previous_group
-        self.set_group(group)
+        self.set_group(group, warp=warp)
 
     def _items(self, name: str) -> ItemT:
         if name == "layout" and self.group is not None:
@@ -450,23 +442,16 @@ class Screen(CommandObject):
         self.set_group(n)
         return n.name
 
-    def cmd_prev_group(self, skip_empty=False, skip_managed=False):
+    def cmd_prev_group(self, skip_empty=False, skip_managed=False, warp=True):
         """Switch to the previous group"""
         n = self.group.get_previous_group(skip_empty, skip_managed)
-        self.set_group(n)
+        self.set_group(n, warp=warp)
         return n.name
 
-    def cmd_toggle_group(self, group_name=None):
+    def cmd_toggle_group(self, group_name=None, warp=True):
         """Switch to the selected group or to the previously active one"""
         group = self.qtile.groups_map.get(group_name)
-        self.toggle_group(group)
-
-    def cmd_togglegroup(self, groupName=None):  # noqa
-        """Switch to the selected group or to the previously active one
-
-        Deprecated: use toggle_group()"""
-        warnings.warn("togglegroup is deprecated, use toggle_group", DeprecationWarning)
-        self.cmd_toggle_group(groupName)
+        self.toggle_group(group, warp=warp)
 
 
 class Group:
@@ -562,7 +547,7 @@ class ScratchPad(Group):
 
 
 class Match:
-    """Match for dynamic groups
+    """Match for dynamic groups or auto-floating windows.
 
     It can match by title, wm_class, role, wm_type, wm_instance_class or
     net_wm_pid.
@@ -574,35 +559,31 @@ class Match:
     Parameters
     ==========
     title:
-        matches against the title (WM_NAME)
+        matches against the WM_NAME atom (X11) or title (Wayland)
     wm_class:
-        matches against the second string in WM_CLASS atom
+        matches against the second string in WM_CLASS atom (X11) or app ID (Wayland)
     role:
-        matches against the WM_ROLE atom
+        matches against the WM_ROLE atom (X11 only)
     wm_type:
-        matches against the WM_TYPE atom
+        matches against the WM_TYPE atom (X11 only)
     wm_instance_class:
-        matches against the first string in WM_CLASS atom
+        matches against the first string in WM_CLASS atom (X11) or app ID (Wayland)
     net_wm_pid:
-        matches against the _NET_WM_PID atom (only int allowed for this
-        rule)
+        matches against the _NET_WM_PID atom (X11) or PID (Wayland) -
+        (only int allowed for this rule)
     func:
         delegate the match to the given function, which receives the tested
         client as argument and must return True if it matches, False otherwise
     """
     def __init__(self, title=None, wm_class=None, role=None, wm_type=None,
                  wm_instance_class=None, net_wm_pid=None,
-                 func: Callable[[window.Window], bool] = None):
+                 func: Callable[[base.WindowType], bool] = None):
         self._rules = {}
 
         if title is not None:
             self._rules["title"] = title
         if wm_class is not None:
             self._rules["wm_class"] = wm_class
-        if role is not None:
-            self._rules["role"] = role
-        if wm_type is not None:
-            self._rules["wm_type"] = wm_type
         if wm_instance_class is not None:
             self._rules["wm_instance_class"] = wm_instance_class
         if net_wm_pid is not None:
@@ -614,6 +595,11 @@ class Match:
                 raise utils.QtileError(error)
         if func is not None:
             self._rules["func"] = func
+
+        if role is not None:
+            self._rules["role"] = role
+        if wm_type is not None:
+            self._rules["wm_type"] = wm_type
 
     @staticmethod
     def _get_property_predicate(name, value):
@@ -636,17 +622,22 @@ class Match:
         for property_name, rule_value in self._rules.items():
             if property_name == 'title':
                 value = client.name
-            elif property_name == "wm_instance_class":
-                wm_class = client.window.get_wm_class()
+            elif "class" in property_name:
+                wm_class = client.get_wm_class()
                 if not wm_class:
                     return False
-                value = wm_class[0]
+                if property_name == "wm_instance_class":
+                    value = wm_class[0]
+                else:
+                    value = wm_class
             elif property_name == 'role':
-                value = client.window.get_wm_window_role()
+                value = client.get_wm_role()
             elif property_name == 'func':
                 return rule_value(client)
+            elif property_name == 'net_wm_pid':
+                value = client.get_pid()
             else:
-                value = getattr(client.window, 'get_' + property_name)()
+                value = client.get_wm_type()
 
             # Some of the window.get_...() functions can return None
             if value is None:
@@ -656,6 +647,8 @@ class Match:
             if not match(rule_value):
                 return False
 
+        if not self._rules:
+            return False
         return True
 
     def map(self, callback, clients):

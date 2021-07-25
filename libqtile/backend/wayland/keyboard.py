@@ -30,6 +30,8 @@ from libqtile.backend.wayland.wlrq import HasListeners
 from libqtile.log_utils import logger
 
 if typing.TYPE_CHECKING:
+    from typing import Dict, Optional, Tuple
+
     from wlroots.wlr_types import InputDevice
     from wlroots.wlr_types.keyboard import KeyboardKeyEvent
 
@@ -38,16 +40,8 @@ if typing.TYPE_CHECKING:
 KEY_PRESSED = WlKeyboard.key_state.pressed
 KEY_RELEASED = WlKeyboard.key_state.released
 
-
-def _get_keysyms(xkb_state, keycode):
-    syms_out = ffi.new("const xkb_keysym_t **")
-    nsyms = lib.xkb_state_key_get_syms(xkb_state, keycode, syms_out)
-    if nsyms > 0:
-        assert syms_out[0] != ffi.NULL
-
-    syms = [syms_out[0][i] for i in range(nsyms)]
-    logger.debug(f"Got {nsyms} syms: {syms}")
-    return syms
+# Keep this around instead of creating it on every key
+xkb_keysym = ffi.new("const xkb_keysym_t **")
 
 
 class Keyboard(HasListeners):
@@ -59,9 +53,10 @@ class Keyboard(HasListeners):
         self.keyboard = device.keyboard
         self.grabbed_keys = core.grabbed_keys
 
-        xkb_context = xkb.Context()
-        self.keyboard.set_keymap(xkb_context.keymap_new_from_names())
         self.keyboard.set_repeat_info(25, 600)
+        self.xkb_context = xkb.Context()
+        self._keymaps: Dict[Tuple[Optional[str], Optional[str]], xkb.Keymap] = {}
+        self.set_keymap(None, None, None)
 
         self.add_listener(self.keyboard.modifiers_event, self._on_modifier)
         self.add_listener(self.keyboard.key_event, self._on_key)
@@ -70,21 +65,34 @@ class Keyboard(HasListeners):
     def finalize(self):
         self.finalize_listeners()
         self.core.keyboards.remove(self)
-        if self.core.keyboards and self.core.seat.keyboard._ptr == ffi.NULL:
+        if self.core.keyboards and self.core.seat.keyboard.destroyed:
             self.seat.set_keyboard(self.core.keyboards[-1].device)
+
+    def set_keymap(
+        self, layout: Optional[str], options: Optional[str], variant: Optional[str]
+    ) -> None:
+        """
+        Set the keymap for this keyboard. `layout` and `options` correspond to
+        XKB_DEFAULT_LAYOUT and XKB_DEFAULT_OPTIONS and if not specified are taken from
+        the environment.
+        """
+        if (layout, options) in self._keymaps:
+            keymap = self._keymaps[(layout, options)]
+        else:
+            keymap = self.xkb_context.keymap_new_from_names(
+                layout=layout, options=options, variant=variant
+            )
+            self._keymaps[(layout, options)] = keymap
+        self.keyboard.set_keymap(keymap)
 
     def _on_destroy(self, _listener, _data):
         logger.debug("Signal: keyboard destroy")
         self.finalize()
 
     def _on_modifier(self, _listener, _data):
-        logger.debug("Signal: keyboard modifier")
         self.seat.keyboard_notify_modifiers(self.keyboard.modifiers)
 
     def _on_key(self, _listener, event: KeyboardKeyEvent):
-        logger.debug("Signal: keyboard key")
-        handled = False
-
         if self.qtile is None:
             # shushes mypy
             self.qtile = self.core.qtile
@@ -93,12 +101,25 @@ class Keyboard(HasListeners):
         if event.state == KEY_PRESSED:
             # translate libinput keycode -> xkbcommon
             keycode = event.keycode + 8
-            keysyms = _get_keysyms(self.keyboard._ptr.xkb_state, keycode)
+            layout_index = lib.xkb_state_key_get_layout(
+                self.keyboard._ptr.xkb_state, keycode
+            )
+            nsyms = lib.xkb_keymap_key_get_syms_by_level(
+                self.keyboard._ptr.keymap,
+                keycode,
+                layout_index,
+                0,
+                xkb_keysym,
+            )
+            keysyms = [xkb_keysym[0][i] for i in range(nsyms)]
             mods = self.keyboard.modifier
             for keysym in keysyms:
                 if (keysym, mods) in self.grabbed_keys:
                     self.qtile.process_key_event(keysym, mods)
-                    handled = True
+                    return
 
-        if not handled:
-            self.seat.keyboard_notify_key(event)
+            if self.core.focused_internal:
+                self.core.focused_internal.process_key_press(keysym)
+                return
+
+        self.seat.keyboard_notify_key(event)

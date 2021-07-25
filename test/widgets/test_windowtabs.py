@@ -28,7 +28,7 @@ from libqtile.config import Screen
 from libqtile.confreader import Config
 
 
-class FakeScreenConfig(Config):
+class WindowTabsConfig(Config):
     auto_fullscreen = True
     groups = [
         libqtile.config.Group("a"),
@@ -60,16 +60,10 @@ class FakeScreenConfig(Config):
     screens = []
 
 
-xephyr_config = {
-    "xinerama": False,
-    "two_screens": False,
-    "width": 900,
-    "height": 960
-}
-fakescreen_config = pytest.mark.parametrize("xephyr, manager", [(xephyr_config, FakeScreenConfig)], indirect=True)
+windowtabs_config = pytest.mark.parametrize("manager", [WindowTabsConfig], indirect=True)
 
 
-@fakescreen_config
+@windowtabs_config
 def test_single_window_states(manager):
 
     def widget_text():
@@ -78,30 +72,30 @@ def test_single_window_states(manager):
     # Default _TextBox text is " " and no hooks fired yet.
     assert widget_text() == " "
 
-    # Load xeyes
-    proc = manager.test_xeyes()
-    assert widget_text() == "<b>xeyes</b>"
+    # Load a window
+    proc = manager.test_window('one')
+    assert widget_text() == "<b>one</b>"
 
     # Maximize window
     manager.c.window.toggle_maximize()
-    assert widget_text() == "<b>[] xeyes</b>"
+    assert widget_text() == "<b>[] one</b>"
 
     # Minimize window
     manager.c.window.toggle_minimize()
-    assert widget_text() == "<b>_ xeyes</b>"
+    assert widget_text() == "<b>_ one</b>"
 
     # Float window
     manager.c.window.toggle_minimize()
     manager.c.window.toggle_floating()
-    assert widget_text() == "<b>V xeyes</b>"
+    assert widget_text() == "<b>V one</b>"
 
-    # Kill xeyes and check text again
+    # Kill the window and check text again
     # NB hooks fired so empty string is now ""
     manager.kill_window(proc)
     assert widget_text() == ""
 
 
-@fakescreen_config
+@windowtabs_config
 def test_multiple_windows(manager):
 
     def widget_text():
@@ -123,7 +117,7 @@ def test_multiple_windows(manager):
     assert widget_text() == ""
 
 
-@fakescreen_config
+@windowtabs_config
 def test_selected(manager):
 
     # Bottom bar widget has custom "selected" indicator

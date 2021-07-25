@@ -43,6 +43,7 @@ from xcffib.xproto import EventMask, StackMode
 from libqtile import config, hook, utils
 from libqtile.backend import base
 from libqtile.backend.x11 import window, xcbq
+from libqtile.backend.x11.xkeysyms import keysyms
 from libqtile.log_utils import logger
 from libqtile.utils import QtileError
 
@@ -161,7 +162,11 @@ class Core(base.Core):
 
         numlock_code = self.conn.keysym_to_keycode(xcbq.keysyms["Num_Lock"])[0]
         self._numlock_mask = xcbq.ModMasks.get(self.conn.get_modifier(numlock_code), 0)
-        self._valid_mask = ~(self._numlock_mask | xcbq.ModMasks["lock"])
+        self._valid_mask = ~(self._numlock_mask | xcbq.ModMasks["lock"] | xcbq.AllButtonsMask)
+
+    @property
+    def name(self):
+        return "x11"
 
     def finalize(self) -> None:
         self.conn.conn.core.DeletePropertyChecked(
@@ -413,7 +418,9 @@ class Core(base.Core):
         This is needed for third party tasklists and drag and drop of tabs in
         chrome
         """
-        wids = [wid for wid, c in windows_map.items() if c.group]
+        wids = [
+            wid for wid, c in windows_map.items() if not isinstance(c, window.Internal)
+        ]
         self._root.set_property("_NET_CLIENT_LIST", wids)
         # TODO: check stack order
         self._root.set_property("_NET_CLIENT_LIST_STACKING", wids)
@@ -498,13 +505,6 @@ class Core(base.Core):
         """Grab the given mouse button for events"""
         modmask = xcbq.translate_masks(mouse.modifiers)
 
-        if isinstance(mouse, config.Click) and mouse.focus:
-            # Make a freezing grab on mouse button to gain focus
-            # Event will propagate to target window
-            grabmode = xcffib.xproto.GrabMode.Sync
-        else:
-            grabmode = xcffib.xproto.GrabMode.Async
-
         eventmask = EventMask.ButtonPress
         if isinstance(mouse, config.Drag):
             eventmask |= EventMask.ButtonRelease
@@ -514,7 +514,7 @@ class Core(base.Core):
                 True,
                 self._root.wid,
                 eventmask,
-                grabmode,
+                xcffib.xproto.GrabMode.Async,
                 xcffib.xproto.GrabMode.Async,
                 xcffib.xproto.Atom._None,
                 xcffib.xproto.Atom._None,
@@ -543,6 +543,16 @@ class Core(base.Core):
         yield
         for i in self.qtile.windows_map.values():
             i._reset_mask()
+
+    def create_internal(self, x: int, y: int, width: int, height: int,
+                        desired_depth: Optional[int] = 32) -> base.Internal:
+        assert self.qtile is not None
+
+        win = self.conn.create_window(x, y, width, height, desired_depth)
+        internal = window.Internal(win, self.qtile, desired_depth)
+        internal.place(x, y, width, height, 0, None)
+        self.qtile.manage(internal)
+        return internal
 
     def handle_SelectionNotify(self, event) -> None:  # noqa: N802
         if not getattr(event, "owner", None):
@@ -596,11 +606,13 @@ class Core(base.Core):
         assert self.qtile is not None
 
         button_code = event.detail
-        state = event.state
-        state |= self._numlock_mask
-        state &= self._valid_mask
+        state = event.state & self._valid_mask
+
+        if not event.child:  # The client's handle_ButtonPress will focus it
+            self.focus_by_click(event)
+
         self.qtile.process_button_click(
-            button_code, state, event.event_x, event.event_y, event
+            button_code, state, event.event_x, event.event_y
         )
         self.conn.conn.core.AllowEvents(xcffib.xproto.Allow.ReplayPointer, event.time)
 
@@ -608,8 +620,7 @@ class Core(base.Core):
         assert self.qtile is not None
 
         button_code = event.detail
-        state = event.state | self._numlock_mask
-        state &= self._valid_mask & ~xcbq.AllButtonsMask
+        state = event.state & self._valid_mask
         self.qtile.process_button_release(button_code, state)
 
     def handle_MotionNotify(self, event) -> None:  # noqa: N802
@@ -656,12 +667,14 @@ class Core(base.Core):
 
         win = self.qtile.windows_map.get(xwin.wid)
         if win:
-            if win.group is self.qtile.current_group:
+            if isinstance(win, window.Window) and win.group is self.qtile.current_group:
                 win.unhide()
             return
 
         if internal:
             win = window.Internal(xwin, self.qtile)
+            self.qtile.manage(win)
+            win.unhide()
         else:
             win = window.Window(xwin, self.qtile)
 
@@ -670,7 +683,10 @@ class Core(base.Core):
                 win.cmd_static(self.qtile.current_screen.index)
                 return
 
-        self.qtile.map_window(win)
+            self.qtile.manage(win)
+            if not win.group or not win.group.screen:
+                return
+            win.unhide()
 
     def handle_DestroyNotify(self, event) -> None:  # noqa: N802
         assert self.qtile is not None
@@ -722,7 +738,7 @@ class Core(base.Core):
         d.state = modmasks
         self.handle_KeyPress(d)
 
-    def focus_by_click(self, e):
+    def focus_by_click(self, e, window=None):
         """Bring a window to the front
 
         Parameters
@@ -733,15 +749,12 @@ class Core(base.Core):
         qtile = self.qtile
         assert qtile is not None
 
-        if e.child:
-            wid = e.child
-            window = self.qtile.windows_map.get(wid)
-
+        if window:
             if qtile.config.bring_front_click and (
                 qtile.config.bring_front_click != "floating_only" or getattr(window, "floating", False)
             ):
                 self.conn.conn.core.ConfigureWindow(
-                    wid, xcffib.xproto.ConfigWindow.StackMode, [StackMode.Above]
+                    window.wid, xcffib.xproto.ConfigWindow.StackMode, [StackMode.Above]
                 )
 
             try:
@@ -810,3 +823,7 @@ class Core(base.Core):
         """
         reply = self.conn.conn.core.QueryPointer(self._root.wid).reply()
         return reply.root_x, reply.root_y
+
+    def keysym_from_name(self, name: str) -> int:
+        """Get the keysym for a key from its name"""
+        return keysyms[name]

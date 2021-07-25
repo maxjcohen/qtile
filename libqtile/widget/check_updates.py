@@ -51,11 +51,14 @@ class CheckUpdates(base.ThreadPoolText):
         # format: "Distro": ("cmd", "number of lines to subtract from output")
         self.cmd_dict = {"Arch": ("pacman -Qu", 0),
                          "Arch_checkupdates": ("checkupdates", 0),
-                         "Arch_Sup": ("pacman -Sup", 1),
+                         "Arch_Sup": ("pacman -Sup", 0),
+                         "Arch_paru": ("paru -Qu", 0),
+                         "Arch_paru_Sup": ("paru -Sup", 0),
                          "Arch_yay": ("yay -Qu", 0),
                          "Debian": ("apt-show-versions -u -b", 0),
+                         "Gentoo_eix": ("EIX_LIMIT=0 eix -u# --world", 0),
                          "Ubuntu": ("aptitude search ~U", 0),
-                         "Fedora": ("dnf list updates", 3),
+                         "Fedora": ("dnf list updates -q", 1),
                          "FreeBSD": ("pkg_version -I -l '<'", 0),
                          "Mandriva": ("urpmq --auto-select", 0)
                          }
@@ -86,6 +89,8 @@ class CheckUpdates(base.ThreadPoolText):
             updates = ""
         num_updates = self.custom_command_modify(len(updates.splitlines()))
 
+        if num_updates < 0:
+            num_updates = 0
         if num_updates == 0:
             self.layout.colour = self.colour_no_updates
             return self.no_update_string

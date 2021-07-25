@@ -33,6 +33,10 @@ def no_op(*args, **kwargs):
     pass
 
 
+async def mock_signal_receiver(*args, **kwargs):
+    return True
+
+
 def fake_timer(interval, func, *args, **kwargs):
     class TimerObj:
         def cancel(self):
@@ -57,12 +61,6 @@ class MockMessage:
 class obj:  # noqa: N801
     def __init__(self, value):
         self.value = value
-
-
-class FakeWindow:
-    class _NestedWindow:
-        wid = 10
-    window = _NestedWindow()
 
 
 # Creates a mock message body containing both metadata and playback status
@@ -116,13 +114,14 @@ def patched_module(monkeypatch):
     # This may only be needed if dbus_next is installed on testing system so helpful for
     # local tests.
     reload(mpris2widget)
+    monkeypatch.setattr("libqtile.widget.mpris2widget.add_signal_receiver", mock_signal_receiver)
     return mpris2widget
 
 
-def test_mpris2_signal_handling(fake_qtile, patched_module):
+def test_mpris2_signal_handling(fake_qtile, patched_module, fake_window):
     mp = patched_module.Mpris2(scroll_chars=20, scroll_wait_intervals=5)
     fakebar = Bar([mp], 24)
-    fakebar.window = FakeWindow()
+    fakebar.window = fake_window
     fakebar.width = 10
     fakebar.height = 10
     fakebar.draw = no_op
@@ -182,10 +181,10 @@ def test_mpris2_signal_handling(fake_qtile, patched_module):
     assert info["isplaying"]
 
 
-def test_mpris2_custom_stop_text(fake_qtile, patched_module):
+def test_mpris2_custom_stop_text(fake_qtile, patched_module, fake_window):
     mp = patched_module.Mpris2(stop_pause_text="Test Paused")
     fakebar = Bar([mp], 24)
-    fakebar.window = FakeWindow()
+    fakebar.window = fake_window
     fakebar.width = 10
     fakebar.height = 10
     fakebar.draw = no_op
@@ -203,10 +202,10 @@ def test_mpris2_custom_stop_text(fake_qtile, patched_module):
     assert mp.displaytext == "Test Paused"
 
 
-def test_mpris2_no_metadata(fake_qtile, patched_module):
+def test_mpris2_no_metadata(fake_qtile, patched_module, fake_window):
     mp = patched_module.Mpris2(stop_pause_text="Test Paused")
     fakebar = Bar([mp], 24)
-    fakebar.window = FakeWindow()
+    fakebar.window = fake_window
     fakebar.width = 10
     fakebar.height = 10
     fakebar.draw = no_op
@@ -218,12 +217,12 @@ def test_mpris2_no_metadata(fake_qtile, patched_module):
     assert mp.displaytext == "No metadata for current track"
 
 
-def test_mpris2_no_scroll(fake_qtile, patched_module):
+def test_mpris2_no_scroll(fake_qtile, patched_module, fake_window):
     # If no scrolling, then the update function creates the text to display
     # and draws the bar.
     mp = patched_module.Mpris2(scroll_chars=None)
     fakebar = Bar([mp], 24)
-    fakebar.window = FakeWindow()
+    fakebar.window = fake_window
     fakebar.width = 10
     fakebar.height = 10
     fakebar.draw = no_op
@@ -238,10 +237,10 @@ def test_mpris2_no_scroll(fake_qtile, patched_module):
     assert mp.text == "Paused: Never Gonna Give You Up - Whenever You Need Somebody - Rick Astley"
 
 
-def test_mpris2_clear_after_scroll(fake_qtile, patched_module):
+def test_mpris2_clear_after_scroll(fake_qtile, patched_module, fake_window):
     mp = patched_module.Mpris2(scroll_chars=60, scroll_wait_intervals=2)
     fakebar = Bar([mp], 24)
-    fakebar.window = FakeWindow()
+    fakebar.window = fake_window
     fakebar.width = 10
     fakebar.height = 10
     fakebar.draw = no_op

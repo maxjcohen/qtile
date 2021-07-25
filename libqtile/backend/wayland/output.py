@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import os
 import typing
 
 from wlroots.util.clock import Timespec
@@ -33,18 +34,18 @@ from wlroots.wlr_types.layer_shell_v1 import (
     LayerSurfaceV1Anchor,
 )
 
-from libqtile import hook
-from libqtile.backend.wayland.window import Static, Window
+from libqtile.backend.wayland.window import Internal, Static
 from libqtile.backend.wayland.wlrq import HasListeners
 from libqtile.log_utils import logger
 
 if typing.TYPE_CHECKING:
-    from typing import List, Set, Tuple
+    from typing import List, Tuple
 
     from wlroots.wlr_types import Surface
 
     from libqtile.backend.wayland.core import Core
     from libqtile.backend.wayland.window import WindowType
+    from libqtile.config import Screen
 
 
 class Output(HasListeners):
@@ -52,28 +53,43 @@ class Output(HasListeners):
         self.core = core
         self.renderer = core.renderer
         self.wlr_output = wlr_output
+        wlr_output.data = self
         self.output_layout = self.core.output_layout
-        self.damage: OutputDamage = OutputDamage(wlr_output)
+        self._damage: OutputDamage = OutputDamage(wlr_output)
         self.wallpaper = None
         self.transform_matrix = wlr_output.transform_matrix
         self.x, self.y = self.output_layout.output_coords(wlr_output)
 
         self.add_listener(wlr_output.destroy_event, self._on_destroy)
-        self.add_listener(self.damage.frame_event, self._on_frame)
-
-        self._mapped_windows: Set[WindowType] = set()
-        hook.subscribe.setgroup(self._get_windows)
-        hook.subscribe.group_window_add(self._get_windows)
-        hook.subscribe.client_killed(self._get_windows)
-        hook.subscribe.client_managed(self._get_windows)
+        self.add_listener(self._damage.frame_event, self._on_frame)
 
         # The layers enum indexes into this list to get a list of surfaces
-        self.layers: List[List[Static]] = [[]] * len(LayerShellV1Layer)
+        self.layers: List[List[Static]] = [[] for _ in range(len(LayerShellV1Layer))]
+
+        # This is run during tests, when we want to fix the output's geometry
+        if wlr_output.is_headless and "PYTEST_CURRENT_TEST" in os.environ:
+            assert len(core.outputs) < 2, "This should not be reached"
+            if not core.outputs:
+                # First test output
+                wlr_output.set_custom_mode(800, 600, 0)
+            else:
+                # Secound test output
+                wlr_output.set_custom_mode(640, 480, 0)
+            wlr_output.commit()
 
     def finalize(self):
         self.core.outputs.remove(self)
         self.finalize_listeners()
-        self.damage.destroy()
+
+    @property
+    def screen(self) -> Screen:
+        assert self.core.qtile is not None
+        x, y, w, h = self.get_geometry()
+        for screen in self.core.qtile.screens:
+            if screen.x == x and screen.y == y:
+                if screen.width == w and screen.height == h:
+                    return screen
+        return self.core.qtile.current_screen
 
     def _on_destroy(self, _listener, _data):
         logger.debug("Signal: output destroy")
@@ -83,7 +99,7 @@ class Output(HasListeners):
         wlr_output = self.wlr_output
 
         with PixmanRegion32() as damage:
-            if not self.damage.attach_render(damage):
+            if not self._damage.attach_render(damage):
                 # no new frame needed
                 wlr_output.rollback()
                 return
@@ -102,53 +118,78 @@ class Output(HasListeners):
                 else:
                     renderer.clear([0, 0, 0, 1])
 
-                for window in self._mapped_windows:
-                    rdata = (
-                        now,
-                        window,
-                        self.x + window.x,
-                        self.y + window.y,
-                        window.opacity,
-                        wlr_output.scale,
-                    )
-                    window.surface.for_each_surface(self._render_surface, rdata)
+                mapped = self.layers[LayerShellV1Layer.BACKGROUND] \
+                    + self.layers[LayerShellV1Layer.BOTTOM] \
+                    + self.core.mapped_windows \
+                    + self.layers[LayerShellV1Layer.TOP] \
+                    + self.layers[LayerShellV1Layer.OVERLAY]
+
+                for window in mapped:
+                    if isinstance(window, Internal):
+                        renderer.render_texture(
+                            window.texture,
+                            self.transform_matrix,
+                            window.x - self.x,  # layout coordinates -> output coordinates
+                            window.y - self.y,
+                            window.opacity,
+                        )
+                    else:
+                        rdata = (
+                            now,
+                            window,
+                            window.x - self.x,  # layout coordinates -> output coordinates
+                            window.y - self.y,
+                            window.opacity,
+                            wlr_output.scale,
+                        )
+                        window.surface.for_each_surface(self._render_surface, rdata)
 
                 wlr_output.render_software_cursors(damage=damage)
                 renderer.end()
 
     def _render_surface(self, surface: Surface, sx: int, sy: int, rdata: Tuple) -> None:
-        now, window, wx, wy, opacity, scale = rdata
-
         texture = surface.get_texture()
         if texture is None:
             return
 
+        now, window, wx, wy, opacity, scale = rdata
         x = (wx + sx) * scale
         y = (wy + sy) * scale
         width = surface.current.width * scale
         height = surface.current.height * scale
         transform_matrix = self.transform_matrix
 
-        if surface == window.surface.surface and window.borderwidth:
-            bw = window.borderwidth * scale
-            bc = window.bordercolor
-            border = Box(
-                int(x),
-                int(y),
-                int(width + bw * 2),
-                int(bw),
-            )
+        if window.borderwidth:
+            bw = int(window.borderwidth * scale)
+
+            if surface == window.surface.surface:
+                outer_w = width + bw * 2
+                outer_h = height + bw * 2
+                num = len(window.bordercolor)
+                bws = [bw // num] * num
+                for i in range(bw % num):
+                    bws[i] += 1
+                coord = 0
+                for i, bc in enumerate(window.bordercolor):
+                    border = Box(
+                        int(x + coord),
+                        int(y + coord),
+                        int(outer_w - coord * 2),
+                        int(bws[i]),
+                    )
+                    self.renderer.render_rect(border, bc, transform_matrix)  # Top border
+                    border.y = int(y + outer_h - bws[i] - coord)
+                    self.renderer.render_rect(border, bc, transform_matrix)  # Bottom border
+                    border.y = int(y + coord)
+                    border.width = int(bws[i])
+                    border.height = int(outer_h - coord * 2)
+                    self.renderer.render_rect(border, bc, transform_matrix)  # Left border
+                    border.x = int(x + outer_w - bws[i] - coord)
+                    self.renderer.render_rect(border, bc, transform_matrix)  # Right border
+                    coord += bws[i]
+
             x += bw
             y += bw
-            self.renderer.render_rect(border, bc, transform_matrix)  # Top border
-            border.y = int(y + height)
-            self.renderer.render_rect(border, bc, transform_matrix)  # Bottom border
-            border.y = int(y - bw)
-            border.width = int(bw)
-            border.height = int(height + bw * 2)
-            self.renderer.render_rect(border, bc, transform_matrix)  # Left border
-            border.x = int(x + width)
-            self.renderer.render_rect(border, bc, transform_matrix)  # Right border
 
         box = Box(
             int(x),
@@ -163,23 +204,8 @@ class Output(HasListeners):
         surface.send_frame_done(now)
 
     def get_geometry(self) -> Tuple[int, int, int, int]:
-        x, y = self.output_layout.output_coords(self.wlr_output)
         width, height = self.wlr_output.effective_resolution()
-        return int(x), int(y), width, height
-
-    def _get_windows(self, *args):
-        """Get the set of mapped windows for rendering and order them."""
-        mapped = []
-        mapped.extend([i for i in self.layers[LayerShellV1Layer.BACKGROUND] if i.mapped])
-        mapped.extend([i for i in self.layers[LayerShellV1Layer.BOTTOM] if i.mapped])
-
-        for win in self.core.qtile.windows_map.values():
-            if win.mapped and isinstance(win, Window):
-                mapped.append(win)
-
-        mapped.extend([i for i in self.layers[LayerShellV1Layer.TOP] if i.mapped])
-        mapped.extend([i for i in self.layers[LayerShellV1Layer.OVERLAY] if i.mapped])
-        self._mapped_windows = mapped
+        return int(self.x), int(self.y), width, height
 
     def organise_layers(self) -> None:
         """Organise the positioning of layer shell surfaces."""
@@ -220,9 +246,43 @@ class Output(HasListeners):
                     win.kill()
                     continue
 
-                win.place(x, y, ww, wh, 0, None)
+                if 0 < state.exclusive_zone:
+                    # Reserve space if:
+                    #    - layer is anchored to an edge and both perpendicular edges, or
+                    #    - layer is anchored to a single edge only.
+                    space = [0, 0, 0, 0]
 
-        self._get_windows()
+                    if state.anchor & LayerSurfaceV1Anchor.HORIZONTAL:
+                        if state.anchor & LayerSurfaceV1Anchor.TOP:
+                            space[2] = state.exclusive_zone
+                        elif state.anchor & LayerSurfaceV1Anchor.BOTTOM:
+                            space[3] = state.exclusive_zone
+                    elif state.anchor & LayerSurfaceV1Anchor.VERTICAL:
+                        if state.anchor & LayerSurfaceV1Anchor.LEFT:
+                            space[0] = state.exclusive_zone
+                        elif state.anchor & LayerSurfaceV1Anchor.RIGHT:
+                            space[1] = state.exclusive_zone
+                    else:
+                        # Single edge only
+                        if state.anchor == LayerSurfaceV1Anchor.TOP:
+                            space[2] = state.exclusive_zone
+                        elif state.anchor == LayerSurfaceV1Anchor.BOTTOM:
+                            space[3] = state.exclusive_zone
+                        if state.anchor == LayerSurfaceV1Anchor.LEFT:
+                            space[0] = state.exclusive_zone
+                        elif state.anchor == LayerSurfaceV1Anchor.RIGHT:
+                            space[1] = state.exclusive_zone
+
+                    to_reserve: Tuple[int, int, int, int] = tuple(space)  # type: ignore
+                    if win.reserved_space != to_reserve:
+                        # Don't reserve more space if it's already been reserved
+                        assert self.core.qtile is not None
+                        self.core.qtile.reserve_space(to_reserve, self.screen)
+                        win.reserved_space = to_reserve
+
+                win.place(x + self.x, y + self.y, ww, wh, 0, None)
+
+        self.core.stack_windows()
 
     def contains(self, win: WindowType) -> bool:
         """Returns whether the given window is visible on this output."""
@@ -238,3 +298,8 @@ class Output(HasListeners):
             return False
 
         return True
+
+    def damage(self) -> None:
+        """Damage this output so it gets re-rendered."""
+        if self.wlr_output.enabled:
+            self._damage.add_whole()

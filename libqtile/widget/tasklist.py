@@ -28,6 +28,7 @@ import re
 import cairocffi
 
 from libqtile import bar, hook, pangocffi
+from libqtile.log_utils import logger
 from libqtile.widget import base
 
 
@@ -82,6 +83,16 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
             None,
             "Method to compute the width of task title. (None, 'uniform'.)"
             "Defaults to None, the normal behaviour."
+        ),
+        (
+            "parse_text", None, "Function to parse and modify window names. "
+            "e.g. function in config that removes excess "
+            "strings from window name: "
+            "def my_func(text)"
+            "    for string in [\" - Chromium\", \" - Firefox\"]:"
+            "        text = text.replace(string, \"\")"
+            "   return text"
+            "then set option parse_text=my_func"
         ),
         (
             "spacing",
@@ -208,6 +219,12 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
 
         window_name = window.name if window and window.name else "?"
 
+        if callable(self.parse_text):
+            try:
+                window_name = self.parse_text(window_name)
+            except:
+                logger.exception("parse_text function failed:")
+
         # Emulate default widget behavior if markup_str is None
         if enforce_markup and markup_str is None:
             markup_str = "%s{}" % (state)
@@ -282,6 +299,12 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
 
     def _configure(self, qtile, bar):
         base._Widget._configure(self, qtile, bar)
+
+        if qtile.core.name == "wayland" and self.icon_size != 0:
+            # Disable icons
+            self.icon_size = 0
+            logger.warning("TaskList icons not supported in Wayland.")
+
         if self.icon_size is None:
             self.icon_size = self.bar.height - 2 * (self.borderwidth +
                                                     self.margin_y)
@@ -341,13 +364,23 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
         icon_padding = (self.icon_size + self.padding_x) if icon else 0
         padding_x = [self.padding_x + icon_padding, self.padding_x]
 
+        if bordercolor is None:
+            # border colour is set to None when we don't want to draw a border at all
+            # Rather than dealing with alpha blending issues, we just set border width
+            # to 0.
+            border_width = 0
+            framecolor = self.background or self.bar.background
+        else:
+            border_width = self.borderwidth
+            framecolor = bordercolor
+
         framed = self.layout.framed(
-            self.borderwidth,
-            bordercolor,
+            border_width,
+            framecolor,
             padding_x,
             self.padding_y
         )
-        if block:
+        if block and bordercolor is not None:
             framed.draw_fill(offset, self.margin_y, rounded)
         else:
             framed.draw(offset, self.margin_y, rounded)
@@ -378,7 +411,7 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
                 if window.floating:
                     window.cmd_bring_to_front()
             else:
-                window.toggle_minimize()
+                window.cmd_toggle_minimize()
 
     def get_window_icon(self, window):
         if not window.icons:
@@ -443,12 +476,11 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
                 border = self.border
                 text_color = border
             else:
-                border = self.unfocused_border or (self.background or
-                                                   self.bar.background)
+                border = self.unfocused_border or None
                 text_color = self.foreground
 
             if self.highlight_method == 'text':
-                border = self.bar.background
+                border = None
             else:
                 text_color = self.foreground
 

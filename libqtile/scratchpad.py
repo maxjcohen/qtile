@@ -159,7 +159,7 @@ class DropDownToggler(WindowVisibilityToggler):
         self.y = ddconfig.y
         self.width = ddconfig.width
         self.height = ddconfig.height
-        window.set_opacity(ddconfig.opacity)
+        window.opacity = ddconfig.opacity
         WindowVisibilityToggler.__init__(
             self, scratchpad_name, window, ddconfig.on_focus_lost_hide, ddconfig.warp_pointer
         )
@@ -184,14 +184,15 @@ class DropDownToggler(WindowVisibilityToggler):
             screen = win.qtile.current_screen
             # calculate windows floating position and width/height
             # these may differ for screens, and thus always recalculated.
-            win.x = int(screen.dx + self.x * screen.dwidth)
-            win.y = int(screen.dy + self.y * screen.dheight)
-            win.float_x = win.x
-            win.float_y = win.y
-            win.width = int(screen.dwidth * self.width)
-            win.height = int(screen.dheight * self.height)
-            # Configure the new geometry
-            win._reconfigure_floating()
+            x = int(screen.dx + self.x * screen.dwidth)
+            y = int(screen.dy + self.y * screen.dheight)
+            win.float_x = x
+            win.float_y = y
+            width = int(screen.dwidth * self.width)
+            height = int(screen.dheight * self.height)
+            win.place(
+                x, y, width, height, win.borderwidth, win.bordercolor, respect_hints=True
+            )
             # Toggle the dropdown
             WindowVisibilityToggler.show(self)
 
@@ -241,7 +242,7 @@ class ScratchPad(group._Group):
         This method is subscribed if the given command is spawned
         and unsubscribed immediately if the associated window is detected.
         """
-        client_pid = client.window.get_net_wm_pid()
+        client_pid = client.get_pid()
         if client_pid in self._spawned:
             name = self._spawned.pop(client_pid)
             if not self._spawned:
@@ -327,7 +328,7 @@ class ScratchPad(group._Group):
         """
         state = []
         for name, dd in self.dropdowns.items():
-            pid = dd.window.window.get_net_wm_pid()
+            pid = dd.window.get_pid()
             state.append((name, pid, dd.visible))
         return state
 

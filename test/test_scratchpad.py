@@ -18,14 +18,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import sys
+from pathlib import Path
+
 import pytest
 
 import libqtile.config
 import libqtile.layout
 import libqtile.widget
 from libqtile.confreader import Config
-from test.conftest import Retry, no_xinerama
+from test.helpers import Retry
 from test.layouts.layout_utils import assert_focus_path, assert_focused
+
+
+def spawn_cmd(title):
+    script = Path(__file__).parent / "scripts" / "window.py"
+    cmd = f"{sys.executable} {script.as_posix()} --name TestWindow {title} normal"
+    return cmd
 
 
 class ScratchPadBaseConfic(Config):
@@ -33,10 +42,10 @@ class ScratchPadBaseConfic(Config):
     screens = []
     groups = [
         libqtile.config.ScratchPad('SCRATCHPAD', dropdowns=[
-            libqtile.config.DropDown('dd-a', 'xterm -T dd-a sh', on_focus_lost_hide=False),
-            libqtile.config.DropDown('dd-b', 'xterm -T dd-b sh', on_focus_lost_hide=False),
-            libqtile.config.DropDown('dd-c', 'xterm -T dd-c sh', on_focus_lost_hide=True),
-            libqtile.config.DropDown('dd-d', 'xterm -T dd-d sh', on_focus_lost_hide=True)
+            libqtile.config.DropDown('dd-a', spawn_cmd('dd-a'), on_focus_lost_hide=False),
+            libqtile.config.DropDown('dd-b', spawn_cmd('dd-b'), on_focus_lost_hide=False),
+            libqtile.config.DropDown('dd-c', spawn_cmd('dd-c'), on_focus_lost_hide=True),
+            libqtile.config.DropDown('dd-d', spawn_cmd('dd-d'), on_focus_lost_hide=True)
         ]),
         libqtile.config.Group("a"),
         libqtile.config.Group("b"),
@@ -47,9 +56,7 @@ class ScratchPadBaseConfic(Config):
     mouse = []
 
 
-# scratchpad_config = lambda x:
-def scratchpad_config(x):
-    return no_xinerama(pytest.mark.parametrize("manager", [ScratchPadBaseConfic], indirect=True)(x))
+scratchpad_config = pytest.mark.parametrize("manager", [ScratchPadBaseConfic], indirect=True)
 
 
 @Retry(ignore_exceptions=(KeyError,))
@@ -67,8 +74,7 @@ def is_killed(manager, name):
 
 @scratchpad_config
 def test_toggling(manager):
-    # adjust command for current display
-    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-a', command='xterm -T dd-a -display %s sh' % manager.display)
+    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-a')
 
     manager.test_window("one")
     assert manager.c.group["a"].info()['windows'] == ['one']
@@ -81,7 +87,7 @@ def test_toggling(manager):
     assert sorted(manager.c.group["a"].info()['windows']) == ['dd-a', 'one']
     assert_focused(manager, 'dd-a')
 
-    # toggle again --> "hide" xterm in scratchpad group
+    # toggle again --> "hide" window in scratchpad group
     manager.c.group["SCRATCHPAD"].dropdown_toggle('dd-a')
     assert manager.c.group["a"].info()['windows'] == ['one']
     assert_focused(manager, 'one')
@@ -96,9 +102,8 @@ def test_toggling(manager):
 
 @scratchpad_config
 def test_focus_cycle(manager):
-    # adjust command for current display
-    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-a', command='xterm -T dd-a -display %s sh' % manager.display)
-    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-b', command='xterm -T dd-b -display %s sh' % manager.display)
+    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-a')
+    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-b')
 
     manager.test_window("one")
     # spawn dd-a by toggling
@@ -124,9 +129,8 @@ def test_focus_cycle(manager):
 
 @scratchpad_config
 def test_focus_lost_hide(manager):
-    # adjust command for current display
-    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-c', command='xterm -T dd-c -display %s sh' % manager.display)
-    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-d', command='xterm -T dd-d -display %s sh' % manager.display)
+    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-c')
+    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-d')
 
     manager.test_window("one")
     assert_focused(manager, 'one')
@@ -177,8 +181,7 @@ def test_focus_lost_hide(manager):
 
 @scratchpad_config
 def test_kill(manager):
-    # adjust command for current display
-    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-a', command='xterm -T dd-a -display %s sh' % manager.display)
+    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-a')
 
     manager.test_window("one")
     assert_focused(manager, 'one')
@@ -201,8 +204,7 @@ def test_kill(manager):
 
 @scratchpad_config
 def test_floating_toggle(manager):
-    # adjust command for current display
-    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-a', command='xterm -T dd-a -display %s sh' % manager.display)
+    manager.c.group["SCRATCHPAD"].dropdown_reconfigure('dd-a')
 
     manager.test_window("one")
     assert_focused(manager, 'one')

@@ -49,13 +49,11 @@ import xcffib.xproto
 from xcffib.xfixes import SelectionEventMask
 from xcffib.xproto import CW, EventMask, WindowClass
 
-from libqtile import xkeysyms
 from libqtile.backend.x11 import window
 from libqtile.backend.x11.xcursors import Cursors
+from libqtile.backend.x11.xkeysyms import keysyms
 from libqtile.log_utils import logger
 from libqtile.utils import QtileError, hex
-
-keysyms = xkeysyms.keysyms
 
 
 class XCBQError(QtileError):
@@ -69,7 +67,7 @@ def rdict(d):
     return r
 
 
-rkeysyms = rdict(xkeysyms.keysyms)
+rkeysyms = rdict(keysyms)
 
 # Keyboard modifiers bitmask values from X Protocol
 ModMasks = {
@@ -310,6 +308,50 @@ class Screen(_Wrapper):
         self.default_colormap = Colormap(conn, screen.default_colormap)
         self.root = window.XWindow(conn, self.root)
 
+        self._visuals = {}
+
+        # Get visuals for 32 and 24 bit
+        for d in [32, 24, self.root_depth]:
+            if d not in self._visuals:
+                visual = self.get_visual_for_depth(self, d)
+                if visual:
+                    self._visuals[d] = visual
+
+    def _get_depth_and_visual(self, desired_depth):
+        """
+        Returns a tuple of (depth, visual) for the requested
+        depth.
+
+        Falls back to the root depth and visual if the requested
+        depth is unavailable.
+        """
+        if desired_depth in self._visuals:
+            return desired_depth, self._visuals[desired_depth]
+
+        logger.info(
+            f"{desired_depth} bit colour depth not available. "
+            f"Falling back to root depth: {self.root_depth}."
+        )
+        return self.root_depth, self._visuals[self.root_depth]
+
+    @staticmethod
+    def get_visual_for_depth(screen, depth):
+        """
+        Returns the visual object of the screen @ some depth
+
+        For an ARGB visual -> depth=32
+        For a RGB visual   -> depth=24
+        """
+        allowed = screen.allowed_depths
+        if depth not in [x.depth for x in allowed]:
+            logger.warning(f"Unsupported colour depth: {depth}.")
+            return
+
+        for i in allowed:
+            if i.depth == depth:
+                if i.visuals:
+                    return i.visuals[0]
+
 
 class PseudoScreen:
     """
@@ -462,6 +504,26 @@ class Connection:
         self.modmap = None
         self.refresh_modmap()
 
+        self._cmaps = {}
+
+    def colormap(self, desired_depth):
+        if desired_depth in self._cmaps:
+            return self._cmaps[desired_depth]
+
+        _, visual = self.default_screen._get_depth_and_visual(desired_depth)
+
+        cmap = self.conn.generate_id()
+        self.conn.core.CreateColormap(
+            xcffib.xproto.ColormapAlloc._None,
+            cmap,
+            self.default_screen.root.wid,
+            visual.visual_id,
+            is_checked=True,
+        ).check()
+
+        self._cmaps[desired_depth] = cmap
+        return cmap
+
     @property
     def pseudoscreens(self):
         pseudoscreens = []
@@ -539,20 +601,28 @@ class Connection:
             return 0
         return self.code_to_syms[keycode][modifier]
 
-    def create_window(self, x, y, width, height):
+    def create_window(self, x, y, width, height, desired_depth=32):
+        depth, visual = self.default_screen._get_depth_and_visual(desired_depth)
+
         wid = self.conn.generate_id()
+
+        value_mask = CW.BackPixmap | CW.BorderPixel | CW.EventMask | CW.Colormap
+        values = [
+            xcffib.xproto.BackPixmap._None,
+            0,
+            EventMask.StructureNotify | EventMask.Exposure,
+            self.colormap(depth),
+        ]
+
         self.conn.core.CreateWindow(
-            self.default_screen.root_depth,
+            depth,
             wid,
             self.default_screen.root.wid,
             x, y, width, height, 0,
             WindowClass.InputOutput,
-            self.default_screen.root_visual,
-            CW.BackPixel | CW.EventMask,
-            [
-                self.default_screen.black_pixel,
-                EventMask.StructureNotify | EventMask.Exposure
-            ]
+            visual.visual_id,
+            value_mask,
+            values
         )
         return window.XWindow(self, wid)
 
@@ -643,6 +713,7 @@ class Painter:
                 if visual.visual_id == self.default_screen.root_visual:
                     root_visual = visual
                     break
+
         surface = cairocffi.xcb.XCBSurface(
             self.conn, root_pixmap, root_visual,
             self.default_screen.width_in_pixels,

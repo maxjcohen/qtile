@@ -1,4 +1,9 @@
-Qtile 0.x.x, released xxxx-xx-xx:
+Qtile xxxxxx, released xxxxxxxxxx:
+    * features
+        - All layouts will accept a list of colors for border_* options with which
+          they will draw multiple borders on the appropriate windows.
+
+Qtile 0.18.0, released 2021-07-04:
     !!! Config breakage !!!
         - The `qtile` entry point doesn't run `qtile start` by default anymore
         - New optional dependency for dbus related features: dbus-next.
@@ -10,7 +15,10 @@ Qtile 0.x.x, released xxxx-xx-xx:
         - `libqtile.window` has been moved to `libqtile.backend.x11.window`; a migration has been added for this.
     !!! deprecation warning !!!
         - 'main' config functions, deprecated in 0.16.1, will no longer be executed.
+    !!! Notice for packagers - new dependencies !!!
+        - Tests now require the 'dbus-next' python module plus 'dbus-launch' and 'notify-send' applications
     * features
+        - added transparency in x11 and wayland backends
         - added measure_mem and measure_swap attributes to memory widget to allow user to choose measurement units.
         - memory widget can now be displayed with decimal values
         - new "qtile migrate" command, which will attempt to upgrade previous
@@ -28,10 +36,13 @@ Qtile 0.x.x, released xxxx-xx-xx:
         - added new argument for CheckUpdates widget: `custom_command_modify` which allows user to modify the
           the line count of the output of `custom_command` with a lambda function (i.e. `lambda x: x-3`).
           Argument defaults to `lambda x: x` and is overridden by `distro` argument's internal lambda.
-        - A Wayland backend has been added which can be used with `qtile start -b wayland`. It is undergoing heavy development
-          and bugs are to be expected, but if you find any bugs or conspicuously missing features that are not listed on our
-          to do list at https://github.com/qtile/qtile/discussions/2409 please do let us know. The backend requires pywlroots
-          and its dependencies python-xkbcommon, pywayland and wlroots 0.13.0.
+        - added new argument for the WindowName, WindowTabs and Tasklist widgets: `parse_text` which allows users to
+          define a function that takes a window name as an input, modify it in some way (e.g. str.replace(), str.upper() or regex)
+          and show that modification on screen.
+        - A Wayland backend has been added which can be used by calling `qtile start -b wayland` directly in your TTY.
+          It requires the latest releases of wlroots, python-xkbcommon, pywayland and pywlroots. It is expected to be
+          unstable so please let us know if you find any bugs!
+        - The 'focus` argument to `Click` and `Drag` objects in your config are no longer necessary (and are ignored).
 
 Qtile 0.17.0, released 2021-02-13:
     !!! Python version breakage !!!

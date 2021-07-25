@@ -144,7 +144,8 @@ class Subscribe:
         return self._subscribe("changegroup", func)
 
     def focus_change(self, func):
-        """Called when focus is changed
+        """Called when focus is changed, including moving focus between groups or when
+        focus is lost completely
 
         **Arguments**
 
@@ -166,7 +167,8 @@ class Subscribe:
 
         **Arguments**
 
-        None
+            * ``Group`` receiving the new window
+            * ``Window`` added to the group
         """
         return self._subscribe("group_window_add", func)
 
@@ -216,7 +218,7 @@ class Subscribe:
         return self._subscribe("client_killed", func)
 
     def client_focus(self, func):
-        """Called whenever focus changes
+        """Called whenever focus moves to a client window
 
         **Arguments**
 
@@ -293,11 +295,11 @@ class Subscribe:
         return self._subscribe("selection_change", func)
 
     def screen_change(self, func):
-        """Called when a screen is added or screen configuration is changed (via xrandr)
+        """Called when the output configuration is changed (e.g. via randr in X11).
 
         **Arguments**
 
-            * ``xproto.randr.ScreenChangeNotify`` event
+            * ``xproto.randr.ScreenChangeNotify`` event (X11) or None (Wayland).
 
         """
         return self._subscribe("screen_change", func)
