@@ -30,7 +30,7 @@ class TileSingle(Tile):
                 h - border_width * 2,
                 border_width,
                 bc,
-                margin=self.margin,
+                margin=self.margin if len(self.clients) > 1 else 0,
             )
             client.unhide()
         else:
