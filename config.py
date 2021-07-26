@@ -169,7 +169,7 @@ screens = [
     Screen(
         wallpaper="~/.local/share/backgrounds/the-midnight-gospel-wallpaper.jpeg",
         wallpaper_mode="fill",
-        bottom=bar.Bar(
+        top=bar.Bar(
             [
                 widget.GroupBox(),
                 widget.CurrentLayout(
