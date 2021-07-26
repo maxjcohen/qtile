@@ -30,7 +30,8 @@ from libqtile import bar, layout, widget
 from libqtile.config import Click, Drag, Group, Key, Match, Screen
 from libqtile.lazy import lazy
 
-COLOR_BG_BAR = "#4c566a"
+COLOR_BG_BAR = "#2e3440"
+COLOR_FOCUS = "#5e81ac"
 
 _widget_defaults = {
     "padding": 10,
@@ -137,7 +138,12 @@ for group_idx, group in enumerate(groups):
     )
 
 layouts = [
-    layout.TileSingle(),
+    layout.TileSingle(
+        margin=10,
+        border_focus=COLOR_FOCUS,
+        border_normal=COLOR_BG_BAR,
+        border_width=3,
+    ),
     # layout.Columns(border_focus_stack='#d75f5f'),
     layout.Max(),
     # Try more layouts by unleashing below layouts.
@@ -255,7 +261,10 @@ floating_layout = layout.Floating(
         Match(wm_class="ssh-askpass"),  # ssh-askpass
         Match(title="branchdialog"),  # gitk
         Match(title="pinentry"),  # GPG key password entry
-    ]
+    ],
+    border_focus=COLOR_FOCUS,
+    border_normal=COLOR_BG_BAR,
+    border_width=3
 )
 auto_fullscreen = True
 focus_on_window_activation = "smart"
