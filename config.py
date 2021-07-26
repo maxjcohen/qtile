@@ -141,7 +141,7 @@ launch_app_cmd = """
 st -e sh -c "nohup $(
 for p in $(echo $PATH | sed -e 's/\:/\ /g'); do
     find $p -maxdepth 1 -executable -printf '%f\n' 2>/dev/null;
-done | fzf)"
+done | fzf --reverse --no-info)"
 """
 groups.append(
     ScratchPad(
