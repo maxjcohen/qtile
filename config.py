@@ -27,7 +27,7 @@
 from typing import List  # noqa: F401
 
 from libqtile import bar, layout, widget
-from libqtile.config import Click, Drag, Group, Key, Match, Screen
+from libqtile.config import Click, Drag, Group, Key, Match, Screen, ScratchPad, DropDown
 from libqtile.lazy import lazy
 
 COLOR_BG_BAR = "#2e3440"
@@ -87,9 +87,13 @@ keys = [
     Key([mod], "w", lazy.window.kill(), desc="Kill focused window"),
     Key([mod, "control"], "r", lazy.restart(), desc="Restart Qtile"),
     Key([mod, "control"], "q", lazy.shutdown(), desc="Shutdown Qtile"),
-    Key([mod], "p", lazy.spawncmd(), desc="Spawn a command using a prompt widget"),
+    Key([mod, "control"], "p", lazy.spawncmd(), desc="Spawn a command using a prompt widget"),
 ]
 
+
+# ============================
+# Groups
+# ============================
 groups_def = [
     {
         "name": "term",
@@ -130,13 +134,39 @@ for group_idx, group in enumerate(groups):
                 lazy.window.togroup(group.name, switch_group=True),
                 desc="Switch to & move focused window to group {}".format(group.name),
             ),
-            # Or, use below if you prefer not to switch to that group.
-            # # mod1 + shift + letter of group = move focused window to group
-            # Key([mod, "shift"], i.name, lazy.window.togroup(i.name),
-            #     desc="move focused window to group {}".format(i.name)),
         ]
     )
 
+launch_app_cmd = """
+st -e sh -c "nohup $(
+for p in $(echo $PATH | sed -e 's/\:/\ /g'); do
+    find $p -maxdepth 1 -executable -printf '%f\n' 2>/dev/null;
+done | fzf)"
+"""
+groups.append(
+    ScratchPad(
+        "scratchpad", [
+            # define a drop down terminal
+            # it is placed in the upper third of the screen by default
+            DropDown(
+                "launcher",
+                launch_app_cmd,
+                opacity=0.88,
+                height=0.55,
+                width=0.80
+            ),
+        ]
+    )
+)
+
+# define keys to toggle the dropdown terminals
+keys.extend([
+    Key([mod], "p", lazy.group["scratchpad"].dropdown_toggle("launcher")),
+])
+
+# ============================
+# Layouts
+# ============================
 layouts = [
     layout.TileSingle(
         margin=10,
@@ -164,6 +194,9 @@ layouts_icons = {
     "float": "",
 }
 
+# ============================
+# Widgets
+# ============================
 widget_defaults = dict(
     font="sans",
     fontsize=12,
