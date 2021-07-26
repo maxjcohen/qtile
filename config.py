@@ -179,6 +179,7 @@ screens = [
                 ),
                 widget.Prompt(**_widget_defaults),
                 widget.WindowName(**_widget_defaults),
+                widget.Systray(),
                 widget.Net(
                     format="{down}{up}",
                     update_interval=3.0,
