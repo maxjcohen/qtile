@@ -152,9 +152,10 @@ groups.append(
             DropDown(
                 "launcher",
                 launch_app_cmd,
-                opacity=0.88,
-                height=0.55,
-                width=0.80
+                y=0.3,
+                height=0.4,
+                x=0.3,
+                width=0.40,
             ),
         ]
     )
