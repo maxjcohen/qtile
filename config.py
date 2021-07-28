@@ -141,7 +141,8 @@ launch_app_cmd = """
 st -e sh -c "nohup $(
 for p in $(echo $PATH | sed -e 's/\:/\ /g'); do
     find $p -maxdepth 1 -executable -printf '%f\n' 2>/dev/null;
-done | fzf --reverse --no-info)"
+done | fzf --reverse --no-info --bind=tab:replace-query,enter:print-query \
+--history ~/.local/share/qtile/qtile_fzf.hist --history-size 1000)"
 """
 groups.append(
     ScratchPad(
