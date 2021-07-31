@@ -110,9 +110,9 @@ groups_def = [
         "matches": [Match(wm_class=["ranger"])],
     },
     {
-        "name": "zathura",
-        "label": "ZAT",
-        "matches": [Match(wm_class=["zathura"])],
+        "name": "video",
+        "label": "",
+        "matches": [Match(wm_class=["MPlayer"])],
     },
     {
         "name": "slack",
