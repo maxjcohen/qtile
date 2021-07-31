@@ -112,7 +112,7 @@ groups_def = [
     },
     {
         "name": "files",
-        "label": "",
+        "label": "",
         "matches": [Match(wm_class=["ranger"])],
     },
     {
@@ -220,6 +220,7 @@ screens = [
             [
                 widget.GroupBox(
                     fontsize=15,
+                    font="Font Awesome 5 Free Solid",
                     highlight_method="line",
                     urgent_alert_method="line",
                     highlight_color=COLOR_BG_BAR,
