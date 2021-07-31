@@ -31,7 +31,8 @@ from libqtile.config import Click, Drag, Group, Key, Match, Screen, ScratchPad, 
 from libqtile.lazy import lazy
 
 COLOR_BG_BAR = "#2e3440"
-COLOR_FOCUS = "#5e81ac"
+COLOR_FOCUS = "#81a1c1"
+COLOR_URGENT = "#bf616a"
 
 _widget_defaults = {
     "padding": 10,
