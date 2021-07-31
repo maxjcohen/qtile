@@ -142,25 +142,17 @@ for group_idx, group in enumerate(groups):
         ]
     )
 
-launch_app_cmd = """
-st -e sh -c "nohup $(
-for p in $(echo $PATH | sed -e 's/\:/\ /g'); do
-    find $p -maxdepth 1 -executable -printf '%f\n' 2>/dev/null;
-done | fzf --reverse --no-info --bind=tab:replace-query,enter:print-query \
---history ~/.local/share/qtile/qtile_fzf.hist --history-size 1000)"
-"""
+launch_app_cmd = "st -e sh -c 'nohup $(fzfmenu)'"
 groups.append(
     ScratchPad(
         "scratchpad", [
-            # define a drop down terminal
-            # it is placed in the upper third of the screen by default
             DropDown(
                 "launcher",
                 launch_app_cmd,
                 y=0.3,
                 height=0.4,
-                x=0.3,
-                width=0.40,
+                x=0.2,
+                width=0.60,
             ),
         ]
     )
