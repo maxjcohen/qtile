@@ -218,10 +218,19 @@ screens = [
         wallpaper_mode="fill",
         top=bar.Bar(
             [
-                widget.GroupBox(),
+                widget.GroupBox(
+                    fontsize=15,
+                    highlight_method="line",
+                    urgent_alert_method="line",
+                    highlight_color=COLOR_BG_BAR,
+                    this_current_screen_border=COLOR_FOCUS,
+                    block_highlight_text_color=COLOR_FOCUS,
+                    urgen_text=COLOR_URGENT,
+                    urgen_border=COLOR_URGENT,
+                ),
                 widget.CurrentLayout(
                     layouts_icons=layouts_icons,
-                    foreground="#88c0d0",
+                    foreground=COLOR_FOCUS,
                     **_widget_defaults
                 ),
                 widget.Prompt(**_widget_defaults),
@@ -267,7 +276,7 @@ screens = [
                     format="%H:%M", fmt=" {}", foreground="#88c0d0", **_widget_defaults
                 ),
             ],
-            24,
+            28,
             background=COLOR_BG_BAR,
         ),
     ),
