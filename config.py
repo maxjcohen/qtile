@@ -87,7 +87,12 @@ keys = [
     Key([mod], "w", lazy.window.kill(), desc="Kill focused window"),
     Key([mod, "control"], "r", lazy.restart(), desc="Restart Qtile"),
     Key([mod, "control"], "q", lazy.shutdown(), desc="Shutdown Qtile"),
-    Key([mod, "control"], "p", lazy.spawncmd(), desc="Spawn a command using a prompt widget"),
+    Key(
+        [mod, "control"],
+        "p",
+        lazy.spawncmd(),
+        desc="Spawn a command using a prompt widget",
+    ),
 ]
 
 
@@ -145,7 +150,8 @@ for group_idx, group in enumerate(groups):
 launch_app_cmd = "st -e sh -c 'nohup $(fzfmenu)'"
 groups.append(
     ScratchPad(
-        "scratchpad", [
+        "scratchpad",
+        [
             DropDown(
                 "launcher",
                 launch_app_cmd,
@@ -154,14 +160,16 @@ groups.append(
                 x=0.2,
                 width=0.60,
             ),
-        ]
+        ],
     )
 )
 
 # define keys to toggle the dropdown terminals
-keys.extend([
-    Key([mod], "p", lazy.group["scratchpad"].dropdown_toggle("launcher")),
-])
+keys.extend(
+    [
+        Key([mod], "p", lazy.group["scratchpad"].dropdown_toggle("launcher")),
+    ]
+)
 
 # ============================
 # Layouts
@@ -296,7 +304,7 @@ floating_layout = layout.Floating(
     ],
     border_focus=COLOR_FOCUS,
     border_normal=COLOR_BG_BAR,
-    border_width=3
+    border_width=3,
 )
 auto_fullscreen = True
 focus_on_window_activation = "smart"
