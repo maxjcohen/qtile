@@ -235,6 +235,7 @@ screens = [
                 ),
                 widget.Prompt(**_widget_defaults),
                 widget.WindowName(**_widget_defaults),
+                widget.Spacer(),
                 widget.Systray(),
                 widget.Net(
                     format="{down}{up}",
