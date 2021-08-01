@@ -118,7 +118,6 @@ groups_def = [
     {
         "name": "video",
         "label": "",
-        "matches": [Match(wm_class=["MPlayer"])],
     },
     {
         "name": "slack",
