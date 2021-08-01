@@ -328,7 +328,7 @@ class BatteryHybrid(base.ThreadPoolText):
         status = self._battery.update_status()
 
         if status.state == BatteryState.CHARGING:
-            battery_icon=""
+            battery_icon=""
         elif status.percent > 0.90:
             battery_icon=""
         elif status.percent > 0.75:
