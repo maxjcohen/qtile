@@ -82,18 +82,23 @@ keys = [
         lazy.layout.toggle_split(),
         desc="Toggle between split and unsplit sides of stack",
     ),
-    Key([mod], "Return", lazy.spawn(terminal), desc="Launch terminal"),
     # Toggle between different layouts as defined below
     Key([mod], "space", lazy.next_layout(), desc="Toggle between layouts"),
     Key([mod], "w", lazy.window.kill(), desc="Kill focused window"),
     Key([mod, "control"], "r", lazy.restart(), desc="Restart Qtile"),
     Key([mod, "control"], "q", lazy.shutdown(), desc="Shutdown Qtile"),
+    # Spawn commands
     Key(
         [mod, "control"],
         "p",
         lazy.spawncmd(),
         desc="Spawn a command using a prompt widget",
     ),
+    Key([mod], "Return", lazy.spawn(terminal), desc="Launch terminal"),
+    Key([mod], "r", lazy.spawn("st -e ranger")),
+    Key([mod], "f", lazy.spawn("st -e sh -c '$(fzfmenu)'")),
+    # Toogle between groups
+    Key([mod], "Tab", lazy.screen.toggle_group()),
 ]
 
 
