@@ -17,16 +17,18 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import re
+
 from libqtile import qtile
 from libqtile.widget import base
 
 
 class VolumePulse(base.ThreadPoolText):
-    """Widget that display and change volume based on pulsemixer"""
+    """Widget that display and change volume based on pactl"""
 
     orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
-        ("update_interval", 0.2, "Update time in seconds."),
+        ("update_interval", 1, "Update time in seconds."),
         ("padding", 3, "Padding left and right. Calculated if None."),
     ]
 
@@ -39,12 +41,19 @@ class VolumePulse(base.ThreadPoolText):
         })
 
     def get_volume(self):
-        get_volume_cmd = ["pulsemixer", "--get-volume"]
-        return int(self.call_process(get_volume_cmd).split()[0])
+        get_volume_cmd = "pactl get-sink-volume @DEFAULT_SINK@"
+        pactl_output = self.call_process(get_volume_cmd.split())
+
+        volume_regex = "(?P<volume>\w+)%"
+        try:
+            return int(re.search(volume_regex, pactl_output).groupdict()["volume"])
+        except AttributeError:
+            return 0
 
     def get_mute(self):
         get_mute_cmd = ["pulsemixer", "--get-mute"]
-        return int(self.call_process(get_mute_cmd))
+        get_mute_cmd = "pactl get-sink-mute @DEFAULT_SINK@"
+        return self.call_process(get_mute_cmd.split()) == "Mute: no\n"
 
     def poll(self):
         mute = self.get_mute()
