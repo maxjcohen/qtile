@@ -24,15 +24,25 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import os
 from typing import List  # noqa: F401
 
 from libqtile import bar, layout, widget
 from libqtile.config import Click, Drag, Group, Key, Match, Screen, ScratchPad, DropDown
 from libqtile.lazy import lazy
 
-COLOR_BG_BAR = "#2e3440"
-COLOR_FOCUS = "#81a1c1"
-COLOR_URGENT = "#bf616a"
+_WM = {
+    "COLOR_BG_BAR": "#2e3440",
+    "COLOR_FOCUS": "#81a1c1",
+    "COLOR_URGENT": "#bf616a",
+}
+
+for key in _WM:
+    try:
+        _WM[key] = os.environ[f"WM_{key}"]
+    except KeyError:
+        pass
+
 
 _widget_defaults = {
     "padding": 10,
@@ -186,8 +196,8 @@ keys.extend(
 layouts = [
     layout.TileSingle(
         margin=10,
-        border_focus=COLOR_FOCUS,
-        border_normal=COLOR_BG_BAR,
+        border_focus=_WM["COLOR_FOCUS"],
+        border_normal=_WM["COLOR_BG_BAR"],
         border_width=3,
     ),
     # layout.Columns(border_focus_stack='#d75f5f'),
@@ -231,15 +241,15 @@ screens = [
                     font="Font Awesome 5 Free Solid",
                     highlight_method="line",
                     urgent_alert_method="line",
-                    highlight_color=COLOR_BG_BAR,
-                    this_current_screen_border=COLOR_FOCUS,
-                    block_highlight_text_color=COLOR_FOCUS,
-                    urgen_text=COLOR_URGENT,
-                    urgen_border=COLOR_URGENT,
+                    highlight_color=_WM["COLOR_BG_BAR"],
+                    this_current_screen_border=_WM["COLOR_FOCUS"],
+                    block_highlight_text_color=_WM["COLOR_FOCUS"],
+                    urgen_text=_WM["COLOR_URGENT"],
+                    urgen_border=_WM["COLOR_URGENT"],
                 ),
                 widget.CurrentLayout(
                     layouts_icons=layouts_icons,
-                    foreground=COLOR_FOCUS,
+                    foreground=_WM["COLOR_FOCUS"],
                     **_widget_defaults
                 ),
                 widget.Prompt(**_widget_defaults),
@@ -287,7 +297,7 @@ screens = [
                 ),
             ],
             28,
-            background=COLOR_BG_BAR,
+            background=_WM["COLOR_BG_BAR"],
         ),
     ),
 ]
@@ -322,8 +332,8 @@ floating_layout = layout.Floating(
         Match(title="branchdialog"),  # gitk
         Match(title="pinentry"),  # GPG key password entry
     ],
-    border_focus=COLOR_FOCUS,
-    border_normal=COLOR_BG_BAR,
+    border_focus=_WM["COLOR_FOCUS"],
+    border_normal=_WM["COLOR_BG_BAR"],
     border_width=3,
 )
 auto_fullscreen = True
