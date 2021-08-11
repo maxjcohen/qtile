@@ -121,6 +121,10 @@ groups_def = [
         "matches": [Match(wm_class=["ranger"])],
     },
     {
+        "name": "code",
+        "label": "",
+    },
+    {
         "name": "video",
         "label": "",
     },
