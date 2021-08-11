@@ -38,7 +38,7 @@ _widget_defaults = {
     "padding": 10,
     "background": None,
     "fontsize": 15,
-    "font": "Source Code Pro Semibold",
+    "font": "Open Sans Bold",
 }
 
 mod = "mod1"  # See "xmodmap" for a list a modifiers available
