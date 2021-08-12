@@ -53,7 +53,7 @@ class VolumePulse(base.ThreadPoolText):
     def get_mute(self):
         get_mute_cmd = ["pulsemixer", "--get-mute"]
         get_mute_cmd = "pactl get-sink-mute @DEFAULT_SINK@"
-        return self.call_process(get_mute_cmd.split()) == "Mute: no\n"
+        return  "Mute: yes" in self.call_process(get_mute_cmd.split())
 
     def poll(self):
         mute = self.get_mute()
