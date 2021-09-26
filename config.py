@@ -123,7 +123,7 @@ groups_def = [
     {
         "name": "firefox",
         "label": "",
-        "matches": [Match(wm_class=["firefox", "vimb"])],
+        "matches": [Match(wm_class=["firefox", "vimb", "Tor Browser"])],
     },
     {
         "name": "files",
