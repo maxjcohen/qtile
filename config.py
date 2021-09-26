@@ -52,7 +52,7 @@ _widget_defaults = {
 }
 
 mod = "mod1"  # See "xmodmap" for a list a modifiers available
-terminal = "alacritty"
+terminal = "st"
 
 keys = [
     # Switch between windows
