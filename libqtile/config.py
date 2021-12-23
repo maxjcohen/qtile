@@ -37,7 +37,7 @@ from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
 from libqtile import configurable, hook, utils
 from libqtile.backend import base
-from libqtile.bar import BarType
+from libqtile.bar import Bar, BarType
 from libqtile.command.base import CommandObject, ItemT
 
 if TYPE_CHECKING:
@@ -389,6 +389,10 @@ class Screen(CommandObject):
             return True, [i.wid for i in self.group.windows]
         elif name == "bar":
             return False, [x.position for x in self.gaps]
+        elif name == "widget":
+            return False, [w.name for g in self.gaps for w in g.widgets if isinstance(g, Bar)]
+        elif name == "group":
+            return True, [self.group.name]
         return None
 
     def _select(self, name, sel):
@@ -406,6 +410,18 @@ class Screen(CommandObject):
                         return i
         elif name == "bar":
             return getattr(self, sel)
+        elif name == "widget":
+            for gap in self.gaps:
+                if not isinstance(gap, Bar):
+                    continue
+                for widget in gap.widgets:
+                    if widget.name == sel:
+                        return widget
+        elif name == "group":
+            if sel is None:
+                return self.group
+            else:
+                return self.group if sel == self.group.name else None
 
     def resize(self, x=None, y=None, w=None, h=None):
         if x is None:
@@ -526,20 +542,24 @@ class ScratchPad(Group):
 
     Parameters
     ==========
-    name : string
+    name: string
         the name of this group
-    dropdowns : default ``None``
+    dropdowns: default ``None``
         list of DropDown objects
-    position : int
+    position: int
         group position
-    label : string
+    label: string
         The display name of the ScratchPad group. Defaults to the empty string
         such that the group is hidden in ``GroupList`` widget.
+    single : Boolean
+        Only one of the window among the specified dropdowns will be
+        visible at a time.
     """
-    def __init__(self, name, dropdowns=None, position=sys.maxsize, label=''):
+    def __init__(self, name, dropdowns=None, position=sys.maxsize, label='', single=False):
         Group.__init__(self, name, layout='floating', layouts=['floating'],
                        init=False, position=position, label=label)
         self.dropdowns = dropdowns if dropdowns is not None else []
+        self.single = single
 
     def __repr__(self):
         return '<config.ScratchPad %r (%s)>' % (
@@ -577,7 +597,7 @@ class Match:
     """
     def __init__(self, title=None, wm_class=None, role=None, wm_type=None,
                  wm_instance_class=None, net_wm_pid=None,
-                 func: Callable[[base.WindowType], bool] = None):
+                 func: Callable[[base.WindowType], bool] = None, wid=None):
         self._rules = {}
 
         if title is not None:
@@ -586,6 +606,8 @@ class Match:
             self._rules["wm_class"] = wm_class
         if wm_instance_class is not None:
             self._rules["wm_instance_class"] = wm_instance_class
+        if wid is not None:
+            self._rules["wid"] = wid
         if net_wm_pid is not None:
             try:
                 self._rules["net_wm_pid"] = int(net_wm_pid)
@@ -603,7 +625,7 @@ class Match:
 
     @staticmethod
     def _get_property_predicate(name, value):
-        if name == 'net_wm_pid':
+        if name == 'net_wm_pid' or name == 'wid':
             return lambda other: other == value
         elif name == 'wm_class':
             def predicate(other):
@@ -636,6 +658,8 @@ class Match:
                 return rule_value(client)
             elif property_name == 'net_wm_pid':
                 value = client.get_pid()
+            elif property_name == "wid":
+                value = client.window.wid
             else:
                 value = client.get_wm_type()
 
@@ -745,6 +769,14 @@ class DropDown(configurable.Configurable):
             'This has only effect if any of the on_focus_lost_xxx '
             'configurations is True'
         ),
+        (
+            'match',
+            None,
+            "Use a ``config.Match`` to identify the spawned window and move it to the "
+            "scratchpad, instead of relying on the window's PID. This works around "
+            "some programs that may not be caught by the window's PID if it does "
+            "not match the PID of the spawned process."
+        ),
     )
 
     def __init__(self, name, cmd, **config):
@@ -755,10 +787,12 @@ class DropDown(configurable.Configurable):
 
         Parameters
         ==========
-        name : string
+        name: string
             The name of the DropDown configuration.
-        cmd : string
+        cmd: string
             Command to spawn a process.
+        match : Match
+            A match object to identify the window instead of the pid.
         """
         configurable.Configurable.__init__(self, **config)
         self.name = name

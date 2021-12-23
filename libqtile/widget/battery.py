@@ -42,7 +42,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 from libqtile import bar, configurable, images
 from libqtile.images import Img
 from libqtile.log_utils import logger
-from libqtile.utils import send_notification
+from libqtile.utils import ColorsType, send_notification
 from libqtile.widget import base
 
 
@@ -345,7 +345,9 @@ class BatteryHybrid(base.ThreadPoolText):
 
 class Battery(base.ThreadPoolText):
     """A text-based battery monitoring widget currently supporting FreeBSD"""
-    orientations = base.ORIENTATION_HORIZONTAL
+    background: Optional[ColorsType]
+    low_background: Optional[ColorsType]
+
     defaults = [
         ('charge_char', '^', 'Character to indicate the battery is charging'),
         ('discharge_char', 'V', 'Character to indicate the battery is discharging'),
@@ -357,6 +359,7 @@ class Battery(base.ThreadPoolText):
         ('show_short_text', True, 'Show "Full" or "Empty" rather than formated text'),
         ('low_percentage', 0.10, "Indicates when to use the low_foreground color 0 < x < 1"),
         ('low_foreground', 'FF0000', 'Font color on low battery'),
+        ('low_background', None, 'Background color on low battery'),
         ('update_interval', 60, 'Seconds between status updates'),
         ('battery', 0, 'Which battery should be monitored (battery number or name)'),
         ('notify_below', None, 'Send a notification below this battery level.'),
@@ -373,6 +376,10 @@ class Battery(base.ThreadPoolText):
 
         self._battery = self._load_battery(**config)
         self._has_notified = False
+
+        if not self.low_background:
+            self.low_background = self.background
+        self.normal_background = self.background
 
     @staticmethod
     def _load_battery(**config):
@@ -425,8 +432,10 @@ class Battery(base.ThreadPoolText):
         if self.layout is not None:
             if status.state == BatteryState.DISCHARGING and status.percent < self.low_percentage:
                 self.layout.colour = self.low_foreground
+                self.background = self.low_background
             else:
                 self.layout.colour = self.foreground
+                self.background = self.normal_background
 
         if status.state == BatteryState.CHARGING:
             char = self.charge_char
@@ -541,7 +550,7 @@ class BatteryIcon(base._Widget):
         self.drawer.clear(self.background or self.bar.background)
         self.drawer.ctx.set_source(self.surfaces[self.current_icon])
         self.drawer.ctx.paint()
-        self.drawer.draw(offsetx=self.offset, width=self.length)
+        self.drawer.draw(offsetx=self.offset, offsety=self.offsety, width=self.length)
 
     @staticmethod
     def _get_icon_key(status: BatteryStatus) -> str:

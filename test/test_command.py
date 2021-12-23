@@ -20,6 +20,7 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
+import logging
 
 import pytest
 
@@ -27,6 +28,7 @@ import libqtile.bar
 import libqtile.config
 import libqtile.confreader
 import libqtile.layout
+import libqtile.log_utils
 import libqtile.widget
 from libqtile.command.base import CommandObject
 from libqtile.command.interface import CommandError
@@ -377,3 +379,83 @@ def test_select_widget(manager):
     assert widget.bar.info()["position"] == "bottom"
     with pytest.raises(libqtile.command.client.SelectError, match="Item not available in object"):
         widget.bar["bottom"]
+
+
+def test_core_node(manager, backend_name):
+    assert manager.c.core.info()["backend"] == backend_name
+
+
+def test_lazy_arguments(manager_nospawn):
+
+    # Decorated function to be bound to key presses
+    @lazy.function
+    def test_func(qtile, value, multiplier=1):
+        qtile.test_func_output = value * multiplier
+
+    config = ServerConfig
+    config.keys = [
+        libqtile.config.Key(
+            ["control"], "j",
+            test_func(10),
+        ),
+        libqtile.config.Key(
+            ["control"], "k",
+            test_func(5, multiplier=100)
+        ),
+    ]
+
+    manager_nospawn.start(config)
+
+    manager_nospawn.c.simulate_keypress(["control"], "j")
+    _, val = manager_nospawn.c.eval("self.test_func_output")
+    assert val == "10"
+
+    manager_nospawn.c.simulate_keypress(["control"], "k")
+    _, val = manager_nospawn.c.eval("self.test_func_output")
+    assert val == "500"
+
+
+def test_deprecated_modules(caplog):
+    libqtile.log_utils.init_log(logging.WARNING, log_path=None, log_color=False)
+
+    from libqtile.command_client import InteractiveCommandClient  # noqa: F401
+    assert caplog.record_tuples == [
+        (
+            'libqtile',
+            logging.WARNING,
+            'libqtile.command_client is deprecated. It has been moved to libqtile.command.client'
+        )
+    ]
+
+    caplog.clear()
+
+    from libqtile.command_graph import CommandGraphNode  # noqa: F401
+    assert caplog.record_tuples == [
+        (
+            'libqtile',
+            logging.WARNING,
+            'libqtile.command_graph is deprecated. It has been moved to libqtile.command.graph'
+        )
+    ]
+
+    caplog.clear()
+
+    from libqtile.command_interface import CommandInterface  # noqa: F401
+    assert caplog.record_tuples == [
+        (
+            'libqtile',
+            logging.WARNING,
+            'libqtile.command_interface is deprecated. It has been moved to libqtile.command.interface'
+        )
+    ]
+
+    caplog.clear()
+
+    from libqtile.command_object import CommandObject  # noqa: F401
+    assert caplog.record_tuples == [
+        (
+            'libqtile',
+            logging.WARNING,
+            'libqtile.command_object is deprecated. It has been moved to libqtile.command.base.'
+        )
+    ]

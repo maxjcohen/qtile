@@ -294,7 +294,7 @@ class _ClientList:
         Positive values are after the client.
 
         Use parameter 'client_position' to insert the given client at 4 specific
-        positions : top, bottom, after_current, before_current.
+        positions: top, bottom, after_current, before_current.
         """
         if client_position is not None:
             if client_position == "after_current":
@@ -490,11 +490,14 @@ class _SimpleLayoutBase(Layout):
         client = self.focus_next(self.clients.current_client) or self.focus_first()
         self.group.focus(client, True)
 
-    def add(self, client, offset_to_current=0):
-        return self.clients.add(client, offset_to_current)
+    def add(self, client, offset_to_current=0, client_position=None):
+        return self.clients.add(client, offset_to_current, client_position)
 
     def remove(self, client):
         return self.clients.remove(client)
+
+    def get_windows(self):
+        return self.clients.clients
 
     def info(self):
         d = Layout.info(self)

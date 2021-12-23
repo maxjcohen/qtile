@@ -25,8 +25,8 @@ import subprocess
 import pytest
 
 import libqtile.config
-from libqtile.bar import Bar
 from libqtile.widget import moc
+from test.widgets.conftest import FakeBar
 
 
 class MockMocpProcess:
@@ -64,7 +64,11 @@ class MockMocpProcess:
     @classmethod
     def run(cls, cmd):
         if cls.is_error:
-            subprocess.call(["exit", "1"])
+            raise subprocess.CalledProcessError(
+                -1,
+                cmd=cmd,
+                output="Couldn't connect to moc."
+            )
 
         arg = cmd[1]
 
@@ -99,11 +103,7 @@ def patched_moc(fake_qtile, monkeypatch, fake_window):
     MockMocpProcess.reset()
     monkeypatch.setattr(widget, "call_process", MockMocpProcess.run)
     monkeypatch.setattr("libqtile.widget.moc.subprocess.Popen", MockMocpProcess.run)
-    fakebar = Bar([widget], 24)
-    fakebar.window = fake_window
-    fakebar.width = 10
-    fakebar.height = 10
-    fakebar.draw = no_op
+    fakebar = FakeBar([widget], window=fake_window)
     widget._configure(fake_qtile, fakebar)
     return widget
 
@@ -185,3 +185,9 @@ def test_moc_button_presses(manager_nospawn, minimal_conf_noscreen, monkeypatch)
     topbar.fake_button_press(0, "top", 0, 0, button=5)
     manager_nospawn.c.widget["moc"].eval("self.update(self.poll())")
     assert info()["text"] == "♫ Neil Diamond - Sweet Caroline"
+
+
+def test_moc_error_handling(patched_moc):
+    MockMocpProcess.is_error = True
+    # Widget does nothing with error message so text is blank
+    assert patched_moc.poll() == ""

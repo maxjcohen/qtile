@@ -167,7 +167,7 @@ class MonadTall(_SimpleLayoutBase):
         ("change_ratio", .05, "Resize ratio"),
         ("change_size", 20, "Resize change in pixels"),
         ("new_client_position", "after_current",
-            "Place new windows : "
+            "Place new windows: "
             " after_current - after the active window."
             " before_current - before the active window,"
             " top - at the top of the stack,"
@@ -687,7 +687,8 @@ class MonadTall(_SimpleLayoutBase):
         """Get closest window to a point x,y"""
         target = min(
             clients,
-            key=lambda c: math.hypot(c.info()["x"] - x, c.info()["y"] - y)
+            key=lambda c: math.hypot(c.x - x, c.y - y),
+            default=self.clients.current_client
         )
         return target
 

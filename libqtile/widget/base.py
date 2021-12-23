@@ -31,11 +31,14 @@
 
 import asyncio
 import copy
+import math
 import subprocess
 from typing import Any, List, Tuple
 
 from libqtile import bar, configurable, confreader
+from libqtile.command import interface
 from libqtile.command.base import CommandError, CommandObject, ItemT
+from libqtile.lazy import LazyCall
 from libqtile.log_utils import logger
 
 
@@ -93,8 +96,11 @@ class _Widget(CommandObject, configurable.Configurable):
     have been configured.
 
     Callback functions can be assigned to button presses by passing a dict to the
-    'callbacks' kwarg. No arguments are passed to the callback function so, if
+    'callbacks' kwarg. No arguments are passed to the function so, if
     you need access to the qtile object, it needs to be imported into your code.
+
+    ``lazy`` functions can also be passed as callback functions and can be used in
+    the same was as keybindings.
 
     For example:
 
@@ -105,18 +111,26 @@ class _Widget(CommandObject, configurable.Configurable):
         def open_calendar():
             qtile.cmd_spawn('gsimplecal next_month')
 
-        clock = widget.Clock(mouse_callbacks={'Button1': open_calendar})
+        clock = widget.Clock(
+            mouse_callbacks={
+                'Button1': open_calendar,
+                'Button3': lazy.spawn('gsimplecal prev_month')
+            }
+        )
 
     When the clock widget receives a click with button 1, the ``open_calendar`` function
-    will be executed. Callbacks can be assigned to other buttons by adding more entries
-    to the passed dictionary.
+    will be executed.
     """
     orientations = ORIENTATION_BOTH
     offsetx: int = 0
     offsety: int = 0
     defaults = [
         ("background", None, "Widget background color"),
-        ("mouse_callbacks", {}, "Dict of mouse button press callback functions."),
+        (
+            "mouse_callbacks",
+            {},
+            "Dict of mouse button press callback functions. Acceps functions and ``lazy`` calls."
+        ),
     ]  # type: List[Tuple[str, Any, str]]
 
     def __init__(self, length, **config):
@@ -134,11 +148,14 @@ class _Widget(CommandObject, configurable.Configurable):
         if length in (bar.CALCULATED, bar.STRETCH):
             self.length_type = length
             self.length = 0
-        else:
-            assert isinstance(length, int)
+        elif isinstance(length, int):
             self.length_type = bar.STATIC
             self.length = length
+        else:
+            raise confreader.ConfigError("Widget width must be an int")
+
         self.configured = False
+        self._futures: List[asyncio.TimerHandle] = []
 
     @property
     def length(self):
@@ -154,12 +171,12 @@ class _Widget(CommandObject, configurable.Configurable):
     def width(self):
         if self.bar.horizontal:
             return self.length
-        return self.bar.size
+        return self.bar.size - (self.bar.border_width[1] + self.bar.border_width[3])
 
     @property
     def height(self):
         if self.bar.horizontal:
-            return self.bar.size
+            return self.bar.size - (self.bar.border_width[0] + self.bar.border_width[2])
         return self.length
 
     @property
@@ -168,8 +185,6 @@ class _Widget(CommandObject, configurable.Configurable):
             return self.offsetx
         return self.offsety
 
-    # Do not start the name with "test", or nosetests will try to test it
-    # directly (prepend an underscore instead)
     def _test_orientation_compatibility(self, horizontal):
         if horizontal:
             if not self.orientations & ORIENTATION_HORIZONTAL:
@@ -189,6 +204,8 @@ class _Widget(CommandObject, configurable.Configurable):
         pass
 
     def _configure(self, qtile, bar):
+        self._test_orientation_compatibility(bar.horizontal)
+
         self.qtile = qtile
         self.bar = bar
         self.drawer = bar.window.create_drawer(self.bar.width, self.bar.height)
@@ -208,6 +225,8 @@ class _Widget(CommandObject, configurable.Configurable):
         pass
 
     def finalize(self):
+        for future in self._futures:
+            future.cancel()
         if hasattr(self, 'layout') and self.layout:
             self.layout.finalize()
         self.drawer.finalize()
@@ -234,7 +253,16 @@ class _Widget(CommandObject, configurable.Configurable):
     def button_press(self, x, y, button):
         name = 'Button{0}'.format(button)
         if name in self.mouse_callbacks:
-            self.mouse_callbacks[name]()
+            cmd = self.mouse_callbacks[name]
+            if isinstance(cmd, LazyCall):
+                if cmd.check(self.qtile):
+                    status, val = self.qtile.server.call(
+                        (cmd.selectors, cmd.name, cmd.args, cmd.kwargs)
+                    )
+                    if status in (interface.ERROR, interface.EXCEPTION):
+                        logger.error("Mouse callback command error %s: %s" % (cmd.name, val))
+            else:
+                cmd()
 
     def button_release(self, x, y, button):
         pass
@@ -251,11 +279,15 @@ class _Widget(CommandObject, configurable.Configurable):
     def _items(self, name: str) -> ItemT:
         if name == "bar":
             return True, []
+        elif name == "screen":
+            return True, []
         return None
 
     def _select(self, name, sel):
         if name == "bar":
             return self.bar
+        elif name == "screen":
+            return self.bar.screen
 
     def cmd_info(self):
         """
@@ -283,10 +315,14 @@ class _Widget(CommandObject, configurable.Configurable):
 
     def timeout_add(self, seconds, method, method_args=()):
         """
-            This method calls either ``.call_later`` with given arguments.
+            This method calls ``.call_later`` with given arguments.
         """
-        return self.qtile.call_later(seconds, self._wrapper, method,
-                                     *method_args)
+        future = self.qtile.call_later(
+            seconds, self._wrapper, method, *method_args
+        )
+
+        self._futures.append(future)
+        return future
 
     def call_process(self, command, **kwargs):
         """
@@ -296,7 +332,15 @@ class _Widget(CommandObject, configurable.Configurable):
         """
         return subprocess.check_output(command, **kwargs, encoding="utf-8")
 
+    def _remove_dead_timers(self):
+        """Remove completed and cancelled timers from the list."""
+        self._futures = [
+            timer for timer in self._futures
+            if not (timer.cancelled() or timer.when() < self.qtile._eventloop.time())
+        ]
+
     def _wrapper(self, method, *method_args):
+        self._remove_dead_timers()
         try:
             method(*method_args)
         except:  # noqa: E722
@@ -322,7 +366,7 @@ class _TextBox(_Widget):
     """
         Base class for widgets that are just boxes containing text.
     """
-    orientations = ORIENTATION_HORIZONTAL
+    orientations = ORIENTATION_BOTH
     defaults = [
         ("font", "sans", "Default font"),
         ("fontsize", None, "Font size. Calculated if None."),
@@ -341,8 +385,8 @@ class _TextBox(_Widget):
     def __init__(self, text=" ", width=bar.CALCULATED, **config):
         self.layout = None
         _Widget.__init__(self, width, **config)
-        self._text = text
         self.add_defaults(_TextBox.defaults)
+        self.text = text
 
     @property
     def text(self):
@@ -412,10 +456,16 @@ class _TextBox(_Widget):
 
     def calculate_length(self):
         if self.text:
-            return min(
-                self.layout.width,
-                self.bar.width
-            ) + self.actual_padding * 2
+            if self.bar.horizontal:
+                return min(
+                    self.layout.width,
+                    self.bar.width
+                ) + self.actual_padding * 2
+            else:
+                return min(
+                    self.layout.width,
+                    self.bar.height
+                ) + self.actual_padding * 2
         else:
             return 0
 
@@ -429,11 +479,32 @@ class _TextBox(_Widget):
         if not self.can_draw():
             return
         self.drawer.clear(self.background or self.bar.background)
-        self.layout.draw(
-            self.actual_padding or 0,
-            int(self.bar.height / 2.0 - self.layout.height / 2.0) + 1
-        )
-        self.drawer.draw(offsetx=self.offsetx, width=self.width)
+        if self.bar.horizontal:
+            self.layout.draw(
+                self.actual_padding or 0,
+                int(self.bar.height / 2.0 - self.layout.height / 2.0) + 1
+            )
+        else:
+            # We need to do some transformations for vertical bars.
+            self.drawer.ctx.save()
+
+            # Left bar reads bottom to top
+            if self.bar.screen.left is self.bar:
+                self.drawer.ctx.rotate(-90 * math.pi / 180.0)
+                self.drawer.ctx.translate(-self.length, 0)
+
+            # Right bar is top to bottom
+            else:
+                self.drawer.ctx.translate(self.bar.width, 0)
+                self.drawer.ctx.rotate(90 * math.pi / 180.0)
+
+            self.layout.draw(
+                self.actual_padding or 0,
+                int(self.bar.width / 2.0 - self.layout.height / 2.0) + 1
+            )
+            self.drawer.ctx.restore()
+
+        self.drawer.draw(offsetx=self.offsetx, offsety=self.offsety, width=self.width)
 
     def cmd_set_font(self, font=UNSPECIFIED, fontsize=UNSPECIFIED,
                      fontshadow=UNSPECIFIED):
@@ -533,7 +604,7 @@ class ThreadPoolText(_TextBox):
     """
     defaults = [
         ("update_interval", 600, "Update interval in seconds, if none, the "
-            "widget updates whenever it's done'."),
+            "widget updates whenever it's done."),
     ]  # type: List[Tuple[str, Any, str]]
 
     def __init__(self, text, **config):
@@ -562,8 +633,8 @@ class ThreadPoolText(_TextBox):
             else:
                 logger.warning('poll() returned None, not rescheduling')
 
-        future = self.qtile.run_in_executor(self.poll)
-        future.add_done_callback(on_done)
+        self.future = self.qtile.run_in_executor(self.poll)
+        self.future.add_done_callback(on_done)
 
     def poll(self):
         pass
@@ -669,7 +740,7 @@ class Mirror(_Widget):
             if self.reflects.drawer.needs_update:
                 self.drawer.clear(self.background or self.bar.background)
                 self.reflects.drawer.paint_to(self.drawer)
-            self.drawer.draw(offsetx=self.offset, width=self.width)
+            self.drawer.draw(offsetx=self.offset, offsety=self.offsety, width=self.width)
 
     def button_press(self, x, y, button):
         self.reflects.button_press(x, y, button)

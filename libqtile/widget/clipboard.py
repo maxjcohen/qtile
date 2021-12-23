@@ -28,7 +28,6 @@ from libqtile.widget import base
 
 class Clipboard(base._TextBox):
     """Display current clipboard contents"""
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         ("selection", "CLIPBOARD",
             "the selection to display(CLIPBOARD or PRIMARY)"),
@@ -66,7 +65,7 @@ class Clipboard(base._TextBox):
         if owner_id in self.qtile.windows_map:
             owner = self.qtile.windows_map[owner_id].window
         else:
-            owner = xcbq.Window(self.qtile.core.conn, owner_id)
+            owner = xcbq.window.XWindow(self.qtile.core.conn, owner_id)
 
         owner_class = owner.get_wm_class()
         if owner_class:

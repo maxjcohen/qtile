@@ -21,6 +21,7 @@ import os
 import os.path
 import shutil
 import sys
+from functools import partial
 from glob import glob
 
 BACKUP_SUFFIX = ".migrate.bak"
@@ -69,10 +70,32 @@ def pacman_to_checkupdates(query):
     )
 
 
+def reset_format(node, capture, filename):
+    args = capture.get("class_arguments")
+    if args:
+        if args[0].type == 260:  # argument list
+            n_children = len(args[0].children)
+            for i in range(n_children):
+                # we only want to remove the format argument
+                if 'format' in str(args[0].children[i]):
+                    # remove the argument and the trailing or preceeding comma
+                    if i == n_children - 1:  # last argument
+                        args[0].children[i - 1].remove()
+                        args[0].children[i - 1].remove()
+                    else:
+                        args[0].children[i].remove()
+                        args[0].children[i].remove()
+
+                    break
+        else:  # there's only one argument
+            args[0].remove()
+
+
 def bitcoin_to_crypto(query):
     return (
         query
         .select_class("BitcoinTicker")
+        .modify(reset_format)
         .rename("CryptoTicker")
     )
 
@@ -124,13 +147,24 @@ def new_at_current_to_new_client_position(query):
     )
 
 
+def windowtogroup_groupName_argument(funcname, query):  # noqa: N802
+    return (
+        query
+        .select_method(funcname)
+        .modify_argument("groupName", "group_name")
+    )
+
+
 MIGRATIONS = [
     client_name_updated,
     tile_master_windows_rename,
     threaded_poll_text_rename,
     pacman_to_checkupdates,
+    bitcoin_to_crypto,
     hook_main_function,
     new_at_current_to_new_client_position,
+    partial(windowtogroup_groupName_argument, "togroup"),
+    partial(windowtogroup_groupName_argument, "cmd_togroup"),
 ]
 
 

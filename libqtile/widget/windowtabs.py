@@ -23,8 +23,8 @@
 # SOFTWARE.
 
 from libqtile import bar, hook
-from libqtile.widget import base
 from libqtile.log_utils import logger
+from libqtile.widget import base
 
 
 class WindowTabs(base._TextBox):
@@ -33,7 +33,6 @@ class WindowTabs(base._TextBox):
         Contrary to TaskList this is not an interactive widget.
         The window that currently has focus is highlighted.
     """
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         ("separator", " | ", "Task separator text."),
         ("selected", ("<b>", "</b>"), "Selected task indicator"),
@@ -78,6 +77,6 @@ class WindowTabs(base._TextBox):
         if callable(self.parse_text):
             try:
                 self.text = self.parse_text(self.text)
-            except:
+            except:  # noqa: E722
                 logger.exception("parse_text function failed:")
         self.bar.draw()

@@ -30,9 +30,9 @@
 
 from typing import List, Optional
 
+from libqtile.backend.base import Window
 from libqtile.config import Match
 from libqtile.layout.base import Layout
-from libqtile.backend.base import Window
 
 
 class Floating(Layout):
@@ -288,6 +288,9 @@ class Floating(Layout):
             self.blur()
         self.clients.remove(client)
         return next_focus
+
+    def get_windows(self):
+        return self.clients
 
     def info(self):
         d = Layout.info(self)

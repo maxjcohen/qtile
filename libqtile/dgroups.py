@@ -150,7 +150,7 @@ class DGroups:
 
     def _add(self, client):
         if client in self.timeout:
-            logger.info('Remove dgroup source')
+            logger.debug('Remove dgroup source')
             self.timeout.pop(client).cancel()
 
         # ignore static windows
@@ -186,7 +186,7 @@ class DGroups:
                     group = self.groups_map.get(rule.group)
                     if group and group_added:
                         for k, v in list(group.layout_opts.items()):
-                            if isinstance(v, collections.Callable):
+                            if isinstance(v, collections.abc.Callable):
                                 v(group_obj.layout)
                             else:
                                 setattr(group_obj.layout, k, v)
@@ -195,7 +195,7 @@ class DGroups:
                             self.qtile.screens[affinity].set_group(group_obj)
 
                 if rule.float:
-                    client.enablefloating()
+                    client.cmd_enable_floating()
 
                 if rule.intrusive:
                     intrusive = rule.intrusive
@@ -249,8 +249,7 @@ class DGroups:
                 self.sort_groups()
             del self.timeout[client]
 
-        # Wait the delay until really delete the group
-        logger.info('Add dgroup timer with delay {}s'.format(self.delay))
+        logger.debug(f'Deleting {group} in {self.delay}s')
         self.timeout[client] = self.qtile.call_later(
             self.delay, delete_client
         )

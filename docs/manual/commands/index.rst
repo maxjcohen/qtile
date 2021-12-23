@@ -10,9 +10,9 @@ different places:
 
 * Commands can be :ref:`bound to keys <config-keys>` in the Qtile
   configuration file.
-* Commands can be :ref:`called through qtile shell <qshell>`, the
+* Commands can be :ref:`called through qtile shell <qtile-shell>`, the
   Qtile shell.
-* The qsh can also be hooked into a Jupyter kernel :ref:`called iqshell
+* The shell can also be hooked into a Jupyter kernel :ref:`called iqshell
   <iqshell>`.
 * Commands can be :ref:`called from a script <scripting>` to
   interact with Qtile from Python.
@@ -121,6 +121,8 @@ specifies the group belonging to the screen that belongs to group "b":
 This amout of connectivity makes it easy to reach out from a given object when
 callbacks and events fire on that object to related objects.
 
+.. _object_graph_keys:
+
 Keys
 ====
 
@@ -212,7 +214,7 @@ Any call can be resolved from a given node.  In addition, each node knows about
 all of the children objects that can be reached from it and have the ability to
 ``.navigate()`` to the other nodes in the command graph.  Each of the object
 types are represented as ``CommandGraphObject`` types and the root node of the
-graph, the ``CommandGraphRoot`` reresents the Qtile instance.  When a call is
+graph, the ``CommandGraphRoot`` represents the Qtile instance.  When a call is
 performed on an object, it returns a ``CommandGraphCall``.  Each call will know
 its own name as well as be able to resolve the path through the command graph
 to be able to find itself.
@@ -273,7 +275,7 @@ command graph, and traversal is done by creating a new command client starting
 from the new node.  When a command is executed against a node, that command is
 dispatched to the held command interface.  The key decision here is how to
 perform the traversal.  The command client exists in two different flavors: the
-standard ``ComandClient`` which is useful for handling more programatic
+standard ``CommandClient`` which is useful for handling more programatic
 traversal of the graph, calling methods to traverse the graph, and the
 ``InteractiveCommandClient`` which behaves more like a standard Python object,
 traversing by accessing properties and performing key lookups.

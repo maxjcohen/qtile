@@ -53,7 +53,6 @@ if TYPE_CHECKING:
 _IGNORED_EVENTS = {
     xcffib.xproto.CreateNotifyEvent,
     xcffib.xproto.FocusInEvent,
-    xcffib.xproto.FocusOutEvent,
     xcffib.xproto.KeyReleaseEvent,
     # DWM handles this to help "broken focusing windows".
     xcffib.xproto.MapNotifyEvent,
@@ -106,15 +105,15 @@ class Core(base.Core):
                 logger.error("not starting; existing window manager {}".format(existing_wmname))
                 raise ExistingWMException(existing_wmname)
 
-        self._root.set_attribute(
-            eventmask=(
-                EventMask.StructureNotify
-                | EventMask.SubstructureNotify
-                | EventMask.SubstructureRedirect
-                | EventMask.EnterWindow
-                | EventMask.LeaveWindow
-            )
+        self.eventmask = (
+            EventMask.StructureNotify
+            | EventMask.SubstructureNotify
+            | EventMask.SubstructureRedirect
+            | EventMask.EnterWindow
+            | EventMask.LeaveWindow
+            | EventMask.ButtonPress
         )
+        self._root.set_attribute(eventmask=self.eventmask)
 
         self._root.set_property(
             "_NET_SUPPORTED", [self.conn.atoms[x] for x in xcbq.SUPPORTED_ATOMS]
@@ -223,10 +222,18 @@ class Core(base.Core):
             loop.remove_reader(self.fd)
             self.fd = None
 
-    def scan(self) -> None:
-        """Scan for existing windows"""
+    def distribute_windows(self, initial) -> None:
+        """Assign windows to groups"""
         assert self.qtile is not None
 
+        if not initial:
+            # We are just reloading config
+            for win in self.qtile.windows_map.values():
+                if type(win) is window.Window:
+                    win.set_group()
+            return
+
+        # Qtile just started - scan for clients
         _, _, children = self._root.query_tree()
         for item in children:
             try:
@@ -242,8 +249,8 @@ class Core(base.Core):
                 item.unmap()
                 continue
 
-            win = self.qtile.windows_map.get(item.wid)
-            if win:
+            if item.wid in self.qtile.windows_map:
+                win = self.qtile.windows_map[item.wid]
                 win.unhide()
                 return
 
@@ -291,10 +298,9 @@ class Core(base.Core):
                 if event_type.endswith("Event"):
                     event_type = event_type[:-5]
 
-                logger.debug(event_type)
-
-                for target in self._get_target_chain(event_type, event):
-                    logger.debug("Handling: {event_type}".format(event_type=event_type))
+                targets = self._get_target_chain(event_type, event)
+                logger.debug(f"X11 event: {event_type} (targets: {len(targets)})")
+                for target in targets:
                     ret = target(event)
                     if not ret:
                         break
@@ -368,9 +374,6 @@ class Core(base.Core):
 
         if hasattr(self, handler):
             chain.append(getattr(self, handler))
-
-        if not chain:
-            logger.info("Unhandled event: {event_type}".format(event_type=event_type))
         return chain
 
     def get_valid_timestamp(self):
@@ -418,8 +421,9 @@ class Core(base.Core):
         This is needed for third party tasklists and drag and drop of tabs in
         chrome
         """
+        # Regular top-level managed windows, i.e. excluding Static, Internal and Systray Icons
         wids = [
-            wid for wid, c in windows_map.items() if not isinstance(c, window.Internal)
+            wid for wid, c in windows_map.items() if isinstance(c, window.Window)
         ]
         self._root.set_property("_NET_CLIENT_LIST", wids)
         # TODO: check stack order
@@ -452,11 +456,7 @@ class Core(base.Core):
 
         for code in codes:
             if code == 0:
-                logger.warning(
-                    "Keysym could not be mapped: {keysym}, mask: {modmask}".format(
-                        keysym=hex(keysym), modmask=modmask
-                    )
-                )
+                logger.warning(f"Can't grab {key} (unknown keysym: {hex(keysym)})")
                 continue
             for amask in self._auto_modmasks():
                 self.conn.conn.core.GrabKey(
@@ -554,6 +554,10 @@ class Core(base.Core):
         self.qtile.manage(internal)
         return internal
 
+    def handle_FocusOut(self, event) -> None:  # noqa: N802
+        if event.detail == xcffib.xproto.NotifyDetail._None:
+            self.conn.fixup_focus()
+
     def handle_SelectionNotify(self, event) -> None:  # noqa: N802
         if not getattr(event, "owner", None):
             return
@@ -594,7 +598,7 @@ class Core(base.Core):
             try:
                 self.qtile.groups[index].cmd_toscreen()
             except IndexError:
-                logger.info("Invalid Desktop Index: %s" % index)
+                logger.debug("Invalid desktop index: %s" % index)
 
     def handle_KeyPress(self, event) -> None:  # noqa: N802
         assert self.qtile is not None
@@ -698,25 +702,40 @@ class Core(base.Core):
     def handle_UnmapNotify(self, event) -> None:  # noqa: N802
         assert self.qtile is not None
 
-        if event.event != self._root.wid:
-            win = self.qtile.windows_map.get(event.window)
-            if win and getattr(win, "group", None):
-                try:
-                    win.hide()
-                    assert isinstance(win, window._Window)
-                    win.state = window.WithdrawnState
-                except xcffib.xproto.WindowError:
-                    # This means that the window has probably been destroyed,
-                    # but we haven't yet seen the DestroyNotify (it is likely
-                    # next in the queue). So, we just let these errors pass
-                    # since the window is dead.
-                    pass
-            self.qtile.unmanage(event.window)
-            if self.qtile.current_window is None:
-                self.conn.fixup_focus()
+        win = self.qtile.windows_map.get(event.window)
+
+        if win and getattr(win, "group", None):
+            try:
+                win.hide()
+                win.state = window.WithdrawnState  # type: ignore
+            except xcffib.xproto.WindowError:
+                # This means that the window has probably been destroyed,
+                # but we haven't yet seen the DestroyNotify (it is likely
+                # next in the queue). So, we just let these errors pass
+                # since the window is dead.
+                pass
+            # Clear these atoms as per spec
+            win.window.conn.conn.core.DeleteProperty(  # type: ignore
+                win.wid, win.window.conn.atoms["_NET_WM_STATE"]  # type: ignore
+            )
+            win.window.conn.conn.core.DeleteProperty(  # type: ignore
+                win.wid, win.window.conn.atoms["_NET_WM_DESKTOP"]  # type: ignore
+            )
+        self.qtile.unmanage(event.window)
+        if self.qtile.current_window is None:
+            self.conn.fixup_focus()
 
     def handle_ScreenChangeNotify(self, event) -> None:  # noqa: N802
         hook.fire("screen_change", event)
+        hook.fire("screens_reconfigured")
+
+    @contextlib.contextmanager
+    def disable_unmap_events(self):
+        self._root.set_attribute(
+            eventmask=self.eventmask & (~EventMask.SubstructureNotify)
+        )
+        yield
+        self._root.set_attribute(eventmask=self.eventmask)
 
     @property
     def painter(self):
@@ -743,7 +762,7 @@ class Core(base.Core):
 
         Parameters
         ==========
-        e : xcb event
+        e: xcb event
             Click event used to determine window to focus
         """
         qtile = self.qtile

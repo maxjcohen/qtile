@@ -254,6 +254,9 @@ class Stack(Layout):
             else:
                 client.hide()
 
+    def get_windows(self):
+        return self.clients
+
     def info(self):
         d = Layout.info(self)
         d["stacks"] = [i.info() for i in self.stacks]

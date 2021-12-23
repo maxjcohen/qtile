@@ -33,7 +33,7 @@ import tempfile
 from typing import TYPE_CHECKING
 
 import libqtile
-from libqtile import bar, confreader, hook, ipc, utils
+from libqtile import bar, hook, ipc, utils
 from libqtile.backend import base
 from libqtile.command import interface
 from libqtile.command.base import (
@@ -48,7 +48,7 @@ from libqtile.config import Click, Drag, Key, KeyChord, Match, Rule
 from libqtile.config import ScratchPad as ScratchPadConfig
 from libqtile.config import Screen
 from libqtile.core.lifecycle import lifecycle
-from libqtile.core.loop import LoopContext
+from libqtile.core.loop import LoopContext, QtileEventLoopPolicy
 from libqtile.core.state import QtileState
 from libqtile.dgroups import DGroups
 from libqtile.extension.base import _Extension
@@ -69,7 +69,6 @@ if TYPE_CHECKING:
 class Qtile(CommandObject):
     """This object is the `root` of the command graph"""
 
-    # These are assigned values in _configure
     current_screen: Screen
     dgroups: DGroups
     _eventloop: asyncio.AbstractEventLoop
@@ -85,7 +84,7 @@ class Qtile(CommandObject):
         self.core = kore
         self.config = config
         self.no_spawn = no_spawn
-        self._state = state
+        self._state: Optional[Union[QtileState, str]] = state
         self.socket_path = socket_path
 
         self._drag: Optional[Tuple] = None
@@ -106,28 +105,21 @@ class Qtile(CommandObject):
         self._stopped_event: Optional[asyncio.Event] = None
 
         self.server = IPCCommandServer(self)
-        self.load_config()
 
-    def load_config(self) -> None:
+    def load_config(self, initial=False) -> None:
         try:
             self.config.load()
             self.config.validate()
         except Exception as e:
-            logger.exception('Error while reading config file (%s)', e)
-            self.config = confreader.Config()
-            from libqtile.widget import TextBox
-            widgets = self.config.screens[0].bottom.widgets  # type: ignore
-            widgets.insert(0, TextBox('Config Err!'))
+            send_notification("Configuration error", str(e))
 
         if hasattr(self.core, "wmname"):
             self.core.wmname = getattr(self.config, "wmname", "qtile")  # type: ignore
 
         self.dgroups = DGroups(self, self.config.groups, self.config.dgroups_key_binder)
 
-        if self.config.widget_defaults:
-            _Widget.global_defaults = self.config.widget_defaults
-        if self.config.extension_defaults:
-            _Extension.global_defaults = self.config.extension_defaults
+        _Widget.global_defaults = self.config.widget_defaults
+        _Extension.global_defaults = self.config.extension_defaults
 
         for installed_extension in _Extension.installed_extensions:
             installed_extension._configure(self)
@@ -137,26 +129,13 @@ class Qtile(CommandObject):
 
         for grp in self.config.groups:
             if isinstance(grp, ScratchPadConfig):
-                sp = ScratchPad(grp.name, grp.dropdowns, grp.label)
+                sp = ScratchPad(grp.name, grp.dropdowns, grp.label, grp.single)
                 sp._configure([self.config.floating_layout],
                               self.config.floating_layout, self)
                 self.groups.append(sp)
                 self.groups_map[sp.name] = sp
 
-    def dump_state(self, buf) -> None:
-        try:
-            pickle.dump(QtileState(self), buf, protocol=0)
-        except:  # noqa: E722
-            logger.exception('Unable to pickle qtile state')
-
-    def _configure(self) -> None:
-        """
-        This is the part of init that needs to happen after the event loop is
-        fully set up. asyncio is required to listen and respond to backend
-        events.
-        """
-        self._process_screens()
-        self.current_screen = self.screens[0]
+        self._process_screens(reloading=not initial)
 
         # Map and Grab keys
         for key in self.config.keys:
@@ -165,23 +144,28 @@ class Qtile(CommandObject):
         for button in self.config.mouse:
             self.grab_button(button)
 
-        # no_spawn is set when we are restarting; we only want to run the
+        # no_spawn is set after the very first startup; we only want to run the
         # startup hook once.
         if not self.no_spawn:
             hook.fire("startup_once")
+            self.no_spawn = True
         hook.fire("startup")
 
         if self._state:
-            try:
-                with open(self._state, 'rb') as f:
-                    st = pickle.load(f)
-                st.apply(self)
-            except:  # noqa: E722
-                logger.exception("failed restoring state")
-            finally:
-                os.remove(self._state)
+            if isinstance(self._state, str):
+                try:
+                    with open(self._state, 'rb') as f:
+                        st = pickle.load(f)
+                        st.apply(self)
+                except:  # noqa: E722
+                    logger.exception("failed restoring state")
+                finally:
+                    os.remove(self._state)
+            else:
+                self._state.apply(self)
 
-        self.core.scan()
+        self.core.distribute_windows(initial)
+
         if self._state:
             for screen in self.screens:
                 screen.group.layout_all()
@@ -192,7 +176,8 @@ class Qtile(CommandObject):
         if self.config.reconfigure_screens:
             hook.subscribe.screen_change(self.cmd_reconfigure_screens)
 
-        hook.fire("startup_complete")
+        if initial:
+            hook.fire("startup_complete")
 
     def _prepare_socket_path(
         self,
@@ -215,6 +200,8 @@ class Qtile(CommandObject):
         Finalizes the Qtile instance on exit.
         """
         self._eventloop = asyncio.get_running_loop()
+        # Set the event loop policy to facilitate access to main event loop
+        asyncio.set_event_loop_policy(QtileEventLoopPolicy(self))
         self._stopped_event = asyncio.Event()
         self.core.setup_listener(self)
         try:
@@ -222,11 +209,13 @@ class Qtile(CommandObject):
                 signal.SIGTERM: self.stop,
                 signal.SIGINT: self.stop,
                 signal.SIGHUP: self.stop,
+                signal.SIGUSR1: self.cmd_reload_config,
+                signal.SIGUSR2: self.cmd_restart,
             }), ipc.Server(
                 self._prepare_socket_path(self.socket_path),
                 self.server.call,
             ):
-                self._configure()
+                self.load_config(initial=True)
                 await self._stopped_event.wait()
         finally:
             self.finalize()
@@ -252,10 +241,48 @@ class Qtile(CommandObject):
         if self._stopped_event is not None:
             self._stopped_event.set()
 
-    def finalize(self) -> None:
+    def dump_state(self, buf) -> None:
+        try:
+            pickle.dump(QtileState(self), buf, protocol=0)
+        except:  # noqa: E722
+            logger.exception('Unable to pickle qtile state')
+
+    def cmd_reload_config(self) -> None:
+        """
+        Reload the configuration file.
+
+        Can also be triggered by sending Qtile a SIGUSR1 signal.
+        """
+        logger.debug('Reloading the configuration file')
+
+        try:
+            self.config.load()
+        except Exception as error:
+            logger.error("Configuration error: {}".format(error))
+            send_notification("Configuration error", str(error))
+            return
+
+        self._state = QtileState(self, restart=False)
+        self._finalize_configurables()
+        hook.clear()
+        self.ungrab_keys()
+        self.chord_stack.clear()
+        self.core.ungrab_buttons()
+        self.mouse_map.clear()
+        self.groups_map.clear()
+        self.groups.clear()
+        self.screens.clear()
+        self.load_config()
+
+    def _finalize_configurables(self) -> None:
+        """
+        Finalize objects that are instantiated within the config file. In addition to
+        shutdown, these are finalized and then regenerated when reloading the config.
+        """
         try:
             for widget in self.widgets_map.values():
                 widget.finalize()
+            self.widgets_map.clear()
 
             for layout in self.config.layouts:
                 layout.finalize()
@@ -265,12 +292,14 @@ class Qtile(CommandObject):
                     gap.finalize()
         except:  # noqa: E722
             logger.exception('exception during finalize')
-        finally:
-            hook.clear()
-            self.core.finalize()
+        hook.clear()
 
-    def _process_screens(self) -> None:
-        current_groups = [screen.group for screen in self.screens if screen.group]
+    def finalize(self) -> None:
+        self._finalize_configurables()
+        self.core.finalize()
+
+    def _process_screens(self, reloading=False) -> None:
+        current_groups = [s.group for s in self.screens if hasattr(s, "group")]
         screens = []
 
         if hasattr(self.config, 'fake_screens'):
@@ -293,8 +322,9 @@ class Qtile(CommandObject):
             else:
                 scr = config[i]
 
-            if not hasattr(self, "current_screen"):
+            if not hasattr(self, "current_screen") or reloading:
                 self.current_screen = scr
+                reloading = False
 
             if len(self.groups) < i + 1:
                 name = f"autogen_{i + 1}"
@@ -344,7 +374,7 @@ class Qtile(CommandObject):
     def process_key_event(self, keysym: int, mask: int) -> None:
         key = self.keys_map.get((keysym, mask), None)
         if key is None:
-            logger.info("Ignoring unknown keysym: {keysym}, mask: {mask}".format(keysym=keysym, mask=mask))
+            logger.debug("Ignoring unknown keysym: {keysym}, mask: {mask}".format(keysym=keysym, mask=mask))
             return
 
         if isinstance(key, KeyChord):
@@ -661,7 +691,8 @@ class Qtile(CommandObject):
 
     def process_button_click(
         self, button_code: int, modmask: int, x: int, y: int
-    ) -> None:
+    ) -> bool:
+        handled = False
         for m in self.mouse_map.get(button_code, []):
             if not m.modmask == modmask:
                 continue
@@ -675,6 +706,7 @@ class Qtile(CommandObject):
                             logger.error(
                                 "Mouse command error %s: %s" % (i.name, val)
                             )
+                        handled = True
             elif isinstance(m, Drag):
                 if m.start:
                     i = m.start
@@ -689,13 +721,18 @@ class Qtile(CommandObject):
                     val = (0, 0)
                 self._drag = (x, y, val[0], val[1], m.commands)
                 self.core.grab_pointer()
+                handled = True
 
-    def process_button_release(self, button_code: int, modmask: int) -> None:
-        for m in self.mouse_map.get(button_code, []):
-            if isinstance(m, Drag):
-                self._drag = None
-                self.core.ungrab_pointer()
-                return
+        return handled
+
+    def process_button_release(self, button_code: int, modmask: int) -> bool:
+        if self._drag is not None:
+            for m in self.mouse_map.get(button_code, []):
+                if isinstance(m, Drag):
+                    self._drag = None
+                    self.core.ungrab_pointer()
+                    return True
+        return False
 
     def process_button_motion(self, x: int, y: int) -> None:
         if self._drag is None:
@@ -756,6 +793,8 @@ class Qtile(CommandObject):
             return True, list(self.windows_map.keys())
         elif name == "screen":
             return True, list(range(len(self.screens)))
+        elif name == "core":
+            return True, []
         return None
 
     def _select(self, name: str, sel: Optional[Union[str, int]]) -> Optional[CommandObject]:
@@ -783,6 +822,8 @@ class Qtile(CommandObject):
                 return self.current_screen
             else:
                 return utils.lget(self.screens, sel)
+        elif name == "core":
+            return self.core
         return None
 
     def call_soon(self, func: Callable, *args) -> asyncio.Handle:
@@ -1018,17 +1059,24 @@ class Qtile(CommandObject):
         try:
             self.config.load()
         except Exception as error:
-            send_notification("Configuration check", str(error.__context__))
+            send_notification("Configuration check", str(error))
         else:
             send_notification("Configuration check", "No error found!")
 
     def cmd_restart(self) -> None:
-        """Restart qtile"""
+        """
+        Restart Qtile.
+
+        Can also be triggered by sending Qtile a SIGUSR2 signal.
+        """
+        if not self.core.supports_restarting:
+            raise CommandError(f"Backend does not support restarting: {self.core.name}")
+
         try:
             self.config.load()
         except Exception as error:
             logger.error("Preventing restart because of a configuration error: {}".format(error))
-            send_notification("Configuration error", str(error.__context__))
+            send_notification("Configuration error", str(error))
             return
         self.restart()
 
@@ -1282,11 +1330,11 @@ class Qtile(CommandObject):
                 try:
                     self.groups_map[group].cmd_toscreen()
                 except KeyError:
-                    logger.info("No group named '{0:s}' present.".format(group))
+                    logger.warning("No group named '{0:s}' present.".format(group))
 
         mb = self.widgets_map.get(widget)
         if not mb:
-            logger.warning("No widget named '{0:s}' present.".format(widget))
+            logger.error("No widget named '{0:s}' present.".format(widget))
             return
 
         mb.start_input(prompt, f, "group", strict_completer=True)
@@ -1317,6 +1365,7 @@ class Qtile(CommandObject):
         command: str = "%s",
         complete: str = "cmd",
         shell: bool = True,
+        aliases: Optional[Dict[str, str]] = None,
     ) -> None:
         """Spawn a command using a prompt widget, with tab-completion.
 
@@ -1330,9 +1379,16 @@ class Qtile(CommandObject):
             command template (default: "%s").
         complete :
             Tab completion function (default: "cmd")
+        shell :
+            Execute the command with /bin/sh (default: True)
+        aliases :
+            Dictionary mapping aliases to commands. If the entered command is a key in
+            this dict, the command it maps to will be executed instead.
         """
         def f(args):
             if args:
+                if aliases and args in aliases:
+                    args = aliases[args]
                 self.cmd_spawn(command % args, shell=shell)
         try:
             mb = self.widgets_map[widget]
@@ -1371,7 +1427,7 @@ class Qtile(CommandObject):
                     return
                 cmd_len = len(cmd_arg)
                 if cmd_len == 0:
-                    logger.info('No command entered.')
+                    logger.debug('No command entered.')
                     return
                 try:
                     result = eval(u'c.{0:s}'.format(cmd))
@@ -1466,7 +1522,7 @@ class Qtile(CommandObject):
             else:
                 logger.warning("Not found bar for hide/show.")
         else:
-            logger.error("Invalid position value:{0:s}".format(position))
+            logger.warning("Invalid position value:{0:s}".format(position))
 
     def cmd_get_state(self) -> str:
         """Get pickled state for restarting qtile"""
@@ -1510,7 +1566,3 @@ class Qtile(CommandObject):
     def cmd_run_extension(self, extension: _Extension) -> None:
         """Run extensions"""
         extension.run()
-
-    def cmd_change_vt(self, vt: int) -> bool:
-        """Change virtual terminal, returning success."""
-        return self.core.change_vt(vt)
