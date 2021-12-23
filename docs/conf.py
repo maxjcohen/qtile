@@ -27,6 +27,7 @@ class Mock(MagicMock):
 MOCK_MODULES = [
     'libqtile._ffi_pango',
     'libqtile.backend.x11._ffi_xcursors',
+    'libqtile.widget._pulse_audio',
     'cairocffi',
     'cairocffi.xcb',
     'cairocffi.pixbuf',
@@ -35,13 +36,33 @@ MOCK_MODULES = [
     'dateutil.parser',
     'dbus_next',
     'dbus_next.aio',
+    'dbus_next.errors',
     'dbus_next.service',
     'dbus_next.constants',
     'iwlib',
     'keyring',
     'mpd',
     'psutil',
-    'trollius',
+    'pywayland',
+    'pywayland.protocol.wayland',
+    'pywayland.server',
+    'wlroots',
+    'wlroots.helper',
+    'wlroots.util',
+    'wlroots.util.box',
+    'wlroots.util.clock',
+    'wlroots.util.edges',
+    'wlroots.util.region',
+    'wlroots.wlr_types',
+    'wlroots.wlr_types.cursor',
+    'wlroots.wlr_types.foreign_toplevel_management_v1',
+    'wlroots.wlr_types.keyboard',
+    'wlroots.wlr_types.layer_shell_v1',
+    'wlroots.wlr_types.output_management_v1',
+    'wlroots.wlr_types.pointer_constraints_v1',
+    'wlroots.wlr_types.server_decoration',
+    'wlroots.wlr_types.virtual_keyboard_v1',
+    'wlroots.wlr_types.xdg_shell',
     'xcffib',
     'xcffib.randr',
     'xcffib.render',
@@ -50,6 +71,7 @@ MOCK_MODULES = [
     'xcffib.xinerama',
     'xcffib.xproto',
     'xdg.IconTheme',
+    'xkbcommon'
 ]
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
@@ -94,7 +116,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Qtile'
-copyright = u'2008-2020, Aldo Cortesi and contributers'
+copyright = u'2008-2021, Aldo Cortesi and contributers'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -185,6 +207,10 @@ html_static_path = ['_static']
 # If true, SmartyPants will be used to convert quotes and dashes to
 # typographically correct entities.
 #html_use_smartypants = True
+
+# smartypants was deprecated in favour of smartquotes
+# We want to disable this so users can copy an paste text into their configs
+smartquotes = False
 
 # Custom sidebar templates, maps document names to template names.
 #html_sidebars = {}

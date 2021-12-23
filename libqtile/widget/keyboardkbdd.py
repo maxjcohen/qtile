@@ -39,7 +39,6 @@ class KeyboardKbdd(base.ThreadPoolText):
 
     .. _dbus-next: https://pypi.org/project/dbus-next/
     """
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         ("update_interval", 1, "Update interval in seconds."),
         ("configured_keyboards", ["us", "ir"],
@@ -57,14 +56,20 @@ class KeyboardKbdd(base.ThreadPoolText):
         self.keyboard = self.configured_keyboards[0]
         self.is_kbdd_running = self._check_kbdd()
         if not self.is_kbdd_running:
-            logger.error('Please check if kbdd is running')
             self.keyboard = "N/A"
 
     def _check_kbdd(self):
-        running_list = self.call_process(["ps", "axw"])
+        try:
+            running_list = self.call_process(["ps", "axw"])
+        except FileNotFoundError:
+            logger.error("'ps' is not installed. Cannot check if kbdd is running.")
+            return False
+
         if re.search("kbdd", running_list):
             self.keyboard = self.configured_keyboards[0]
             return True
+
+        logger.error("kbdd is not running.")
         return False
 
     async def _config_async(self):

@@ -30,6 +30,7 @@
 from os import path
 
 from libqtile import bar, pangocffi, utils
+from libqtile.log_utils import logger
 from libqtile.notify import ClosedReason, notifier
 from libqtile.widget import base
 
@@ -46,7 +47,6 @@ class Notify(base._TextBox):
     the ``action`` option to disable all action handling. Unfortunately we cannot
     specify the capability for exactly one action.
     """
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         ("foreground_urgent", "ff0000", "Foreground urgent priority colour"),
         ("foreground_low", "dddddd", "Foreground low priority  colour"),
@@ -57,6 +57,13 @@ class Notify(base._TextBox):
         ),
         ("audiofile", None, "Audiofile played during notifications"),
         ("action", True, "Enable handling of default action upon right click"),
+        (
+            "parse_text", None, "Function to parse and modify notifications. "
+            "e.g. function in config that removes line returns:"
+            "def my_func(text)"
+            "   return text.replace('\n', '')"
+            "then set option parse_text=my_func"
+        ),
     ]
     capabilities = {'body', 'actions'}
 
@@ -73,7 +80,7 @@ class Notify(base._TextBox):
         if self.action:
             default_callbacks['Button3'] = self.invoke
         else:
-            self.capabilities = Notify.capabilities.difference({"action"})
+            self.capabilities = Notify.capabilities.difference({"actions"})
         self.add_callbacks(default_callbacks)
 
     def _configure(self, qtile, bar):
@@ -105,6 +112,11 @@ class Notify(base._TextBox):
             self.text = '<span weight="bold">%s</span> - %s' % (
                 self.text, pangocffi.markup_escape_text(notif.body)
             )
+        if callable(self.parse_text):
+            try:
+                self.text = self.parse_text(self.text)
+            except:  # noqa: E722
+                logger.exception("parse_text function failed:")
         if self.audiofile and path.exists(self.audiofile):
             self.qtile.cmd_spawn("aplay -q '%s'" % self.audiofile)
 
@@ -130,7 +142,10 @@ class Notify(base._TextBox):
         self.bar.draw()
 
     def clear(self, reason=ClosedReason.dismissed):
-        notifier._service.NotificationClosed(self.current_id, reason)
+        notifier._service.NotificationClosed(
+            notifier.notifications[self.current_id].id,
+            reason
+        )
         self.text = ''
         self.current_id = len(notifier.notifications) - 1
         self.bar.draw()

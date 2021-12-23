@@ -27,6 +27,7 @@
 # SOFTWARE.
 
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,8 @@ from libqtile.lazy import lazy
 from test.conftest import dualmonitor, multimonitor
 from test.helpers import BareConfig, Retry, assert_window_died
 from test.layouts.layout_utils import assert_focused
+
+configs_dir = Path(__file__).resolve().parent / "configs"
 
 
 class ManagerConfig(Config):
@@ -949,7 +952,7 @@ def test_setgroup(manager):
     assert manager.c.groups()["c"]["screen"] == 0
 
     # Setting the current group once again switches back to the previous group
-    manager.c.group["c"].toscreen()
+    manager.c.group["c"].toscreen(toggle=True)
     manager.groupconsistency()
     assert manager.c.group.info()["name"] == "b"
 
@@ -1078,3 +1081,80 @@ def test_switch_groups_cursor_warp(manager_nospawn):
     assert_focused(manager_nospawn, "three")
     assert manager_nospawn.c.group.info()["name"] == "b"
     assert manager_nospawn.c.layout.info()["name"] == "max"
+
+
+def test_cmd_reload_config(manager_nospawn):
+    # The test config uses presence of Qtile.test_data to change config values
+    # Here we just want to check configurables are being updated within the live Qtile
+    manager_nospawn.start(lambda: BareConfig(file_path=configs_dir / "reloading.py"))
+
+    @Retry(ignore_exceptions=(AssertionError,))
+    def assert_dd_appeared():
+        assert "dd" in manager_nospawn.c.group.info()["windows"]
+
+    # Original config
+    assert manager_nospawn.c.eval("len(self.keys_map)") == (True, '1')
+    assert manager_nospawn.c.eval("len(self.mouse_map)") == (True, '1')
+    assert "".join(manager_nospawn.c.groups().keys()) == "12345S"
+    assert len(manager_nospawn.c.group.info()['layouts']) == 1
+    assert manager_nospawn.c.widget['clock'].eval('self.background') == (True, 'None')
+    screens = manager_nospawn.c.screens()[0]
+    assert screens['gaps']['bottom'][3] == 24 and not screens['gaps']['top']
+    assert len(manager_nospawn.c.internal_windows()) == 1
+    assert manager_nospawn.c.eval('self.dgroups.key_binder') == (True, 'None')
+    assert manager_nospawn.c.eval('len(self.dgroups.rules)') == (True, '6')
+    manager_nospawn.test_window("one")
+    assert manager_nospawn.c.window.info()['floating'] is True
+    manager_nospawn.c.window.kill()
+    if manager_nospawn.backend.name == "x11":
+        assert manager_nospawn.c.eval('self.core.wmname') == (True, 'LG3D')
+    manager_nospawn.c.group['S'].dropdown_toggle('dropdown1')  # Spawn dropdown
+    assert_dd_appeared()
+    manager_nospawn.c.group['S'].dropdown_toggle('dropdown1')  # Send it to ScratchPad
+
+    # Reload #1 - with libqtile.qtile.test_data
+    manager_nospawn.c.eval("self.test_data = 1")
+    manager_nospawn.c.reload_config()
+    assert manager_nospawn.c.eval("len(self.keys_map)") == (True, '2')
+    assert manager_nospawn.c.eval("len(self.mouse_map)") == (True, '2')
+    assert "".join(manager_nospawn.c.groups().keys()) == "123456789S"
+    assert len(manager_nospawn.c.group.info()['layouts']) == 2
+    assert manager_nospawn.c.widget['currentlayout'].eval('self.background') == (True, '#ff0000')
+    screens = manager_nospawn.c.screens()[0]
+    assert screens['gaps']['top'][3] == 32 and not screens['gaps']['bottom']
+    assert len(manager_nospawn.c.internal_windows()) == 1
+    _, binder = manager_nospawn.c.eval('self.dgroups.key_binder')
+    assert 'function simple_key_binder' in binder
+    assert manager_nospawn.c.eval('len(self.dgroups.rules)') == (True, '11')
+    manager_nospawn.test_window("one")
+    assert manager_nospawn.c.window.info()['floating'] is False
+    manager_nospawn.c.window.kill()
+    if manager_nospawn.backend.name == "x11":
+        assert manager_nospawn.c.eval('self.core.wmname') == (True, 'TEST')
+    manager_nospawn.c.group['S'].dropdown_toggle('dropdown2')  # Spawn second dropdown
+    assert_dd_appeared()
+    manager_nospawn.c.group['S'].dropdown_toggle('dropdown1')  # Send it to ScratchPad
+    assert 'dd' in manager_nospawn.c.groups()['S']['windows']
+    assert 'dd' in manager_nospawn.c.groups()['S']['windows']
+
+    # Reload #2 - back to without libqtile.qtile.test_data
+    manager_nospawn.c.eval("del self.test_data")
+    manager_nospawn.c.reload_config()
+    assert manager_nospawn.c.eval("len(self.keys_map)") == (True, '1')
+    assert manager_nospawn.c.eval("len(self.mouse_map)") == (True, '1')
+    # The last four groups persist within QtileState
+    assert "".join(manager_nospawn.c.groups().keys()) == "12345S"
+    assert len(manager_nospawn.c.group.info()['layouts']) == 1
+    assert manager_nospawn.c.widget['clock'].eval('self.background') == (True, 'None')
+    screens = manager_nospawn.c.screens()[0]
+    assert screens['gaps']['bottom'][3] == 24 and not screens['gaps']['top']
+    assert len(manager_nospawn.c.internal_windows()) == 1
+    assert manager_nospawn.c.eval('self.dgroups.key_binder') == (True, 'None')
+    assert manager_nospawn.c.eval('len(self.dgroups.rules)') == (True, '6')
+    manager_nospawn.test_window("one")
+    assert manager_nospawn.c.window.info()['floating'] is True
+    manager_nospawn.c.window.kill()
+    if manager_nospawn.backend.name == "x11":
+        assert manager_nospawn.c.eval('self.core.wmname') == (True, 'LG3D')
+    assert 'dd' in manager_nospawn.c.groups()['S']['windows']  # First dropdown persists
+    assert 'dd' in manager_nospawn.c.groups()['1']['windows']  # Second orphans to group

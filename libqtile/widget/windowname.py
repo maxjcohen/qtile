@@ -25,13 +25,12 @@
 # SOFTWARE.
 
 from libqtile import bar, hook, pangocffi
-from libqtile.widget import base
 from libqtile.log_utils import logger
+from libqtile.widget import base
 
 
 class WindowName(base._TextBox):
     """Displays the name of the window that currently has focus"""
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         ('for_current_screen', False, 'instead of this bars screen use currently active screen'),
         ('empty_group_string', ' ', 'string to display when no windows are focused on current group'),
@@ -80,7 +79,7 @@ class WindowName(base._TextBox):
             if callable(self.parse_text):
                 try:
                     var["name"] = self.parse_text(var["name"])
-                except:
+                except:  # noqa: E722
                     logger.exception("parse_text function failed:")
             wm_class = w.get_wm_class()
             var["class"] = wm_class[0] if wm_class else ""

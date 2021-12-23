@@ -33,7 +33,6 @@ class Moc(base.ThreadPoolText):
 
     MOC (http://moc.daper.net) should be installed.
     """
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         ('play_color', '00ff00', 'Text colour when playing.'),
         ('noplay_color', 'cecece', 'Text colour when not playing.'),
@@ -57,7 +56,7 @@ class Moc(base.ThreadPoolText):
         try:
             output = self.call_process(['mocp', '-i'])
         except subprocess.CalledProcessError as err:
-            output = err.output.decode()
+            output = err.output
         if output.startswith("State"):
             output = output.splitlines()
             info = {'State': "",

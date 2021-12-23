@@ -159,12 +159,12 @@ class TestManager:
         self.sockfile = self._sockfile.name
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_tb):
+    def __exit__(self, _exc_type, _exc_value, _exc_tb):
         """Clean up resources"""
         self.terminate()
         self._sockfile.close()
 
-    def start(self, config_class, no_spawn=False):
+    def start(self, config_class, no_spawn=False, state=None):
         rpipe, wpipe = multiprocessing.Pipe()
 
         def run_qtile():
@@ -179,6 +179,7 @@ class TestManager:
                     config_class(),
                     socket_path=self.sockfile,
                     no_spawn=no_spawn,
+                    state=state
                 ).loop()
             except Exception:
                 wpipe.send(traceback.format_exc())
@@ -312,12 +313,15 @@ class TestManager:
         if not success():
             raise AssertionError("Window could not be killed...")
 
-    def test_window(self, name, floating=False, wm_type="normal"):
+    def test_window(self, name, floating=False, wm_type="normal", export_sni=False):
         """
         Create a simple window in X or Wayland. If `floating` is True then the wmclass
         is set to "dialog", which triggers auto-floating based on `default_float_rules`.
         `wm_type` can be changed from "normal" to "notification", which creates a window
         that not only floats but does not grab focus.
+
+        Setting `export_sni` to True will publish a simplified StatusNotifierItem interface
+        on DBus.
 
         Windows created with this method must have their process killed explicitly, no
         matter what type they are.
@@ -325,7 +329,10 @@ class TestManager:
         python = sys.executable
         path = Path(__file__).parent / "scripts" / "window.py"
         wmclass = "dialog" if floating else "TestWindow"
-        return self._spawn_window(python, path, "--name", wmclass, name, wm_type)
+        args = [python, path, "--name", wmclass, name, wm_type]
+        if export_sni:
+            args.append("export_sni_interface")
+        return self._spawn_window(*args)
 
     def test_notification(self, name="notification"):
         return self.test_window(name, wm_type="notification")

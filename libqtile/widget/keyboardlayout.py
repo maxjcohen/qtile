@@ -100,7 +100,7 @@ class _X11LayoutBackend(_BaseLayoutBackend):
 
 class _WaylandLayoutBackend(_BaseLayoutBackend):
     def __init__(self, qtile: Qtile) -> None:
-        self.set_keymap = qtile.core.set_keymap  # type: ignore
+        self.set_keymap = qtile.core.cmd_set_keymap  # type: ignore
         self._layout: str = ""
 
     def get_keyboard(self) -> str:
@@ -134,7 +134,6 @@ class KeyboardLayout(base.InLoopPollText):
 
     When running Qtile with the X11 backend, this widget requires setxkbmap to be available.
     """
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         ("update_interval", 1, "Update time in seconds."),
         ("configured_keyboards", ["us"], "A list of predefined keyboard layouts "
@@ -142,7 +141,7 @@ class KeyboardLayout(base.InLoopPollText):
             "['us', 'us colemak', 'es', 'fr']."),
         ("display_map", {}, "Custom display of layout. Key should be in format "
             "'layout variant'. For example: "
-            "{'us': 'us ', 'lt sgs': 'sgs', 'ru phonetic': 'ru '}"),
+            "{'us': 'us', 'lt sgs': 'sgs', 'ru phonetic': 'ru'}"),
         ("option", None, "string of setxkbmap option. Ex., 'compose:menu,grp_led:scroll'"),
     ]
 

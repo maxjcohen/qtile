@@ -95,6 +95,9 @@ class Single(Layout):
     def cmd_previous(self):
         pass
 
+    def get_windows(self):
+        return self.window
+
 
 class Slice(Layout):
     """Slice layout
@@ -264,6 +267,13 @@ class Slice(Layout):
     @property
     def commands(self):
         return self._get_active_layout().commands
+
+    def get_windows(self):
+        clients = list()
+        for layout in self._get_layouts():
+            if layout.get_windows() is not None:
+                clients.extend(layout.get_windows())
+        return clients
 
     def info(self):
         d = Layout.info(self)

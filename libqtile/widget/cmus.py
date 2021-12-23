@@ -33,7 +33,6 @@ class Cmus(base.ThreadPoolText):
 
     Cmus (https://cmus.github.io) should be installed.
     """
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         ('play_color', '00ff00', 'Text colour when playing.'),
         ('noplay_color', 'cecece', 'Text colour when not playing.'),
@@ -57,7 +56,7 @@ class Cmus(base.ThreadPoolText):
         try:
             output = self.call_process(['cmus-remote', '-C', 'status'])
         except subprocess.CalledProcessError as err:
-            output = err.output.decode()
+            output = err.output
         if output.startswith("status"):
             output = output.splitlines()
             info = {'status': "",

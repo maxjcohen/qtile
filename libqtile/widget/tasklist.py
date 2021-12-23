@@ -222,7 +222,7 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
         if callable(self.parse_text):
             try:
                 window_name = self.parse_text(window_name)
-            except:
+            except:  # noqa: E722
                 logger.exception("parse_text function failed:")
 
         # Emulate default widget behavior if markup_str is None
@@ -498,4 +498,4 @@ class TaskList(base._Widget, base.PaddingMixin, base.MarginMixin):
             )
             offset += (bw + self.spacing)
 
-        self.drawer.draw(offsetx=self.offset, width=self.width)
+        self.drawer.draw(offsetx=self.offset, offsety=self.offsety, width=self.width)

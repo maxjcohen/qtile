@@ -89,6 +89,7 @@ def _geometry_getter(attr):
             self.y = g.y
             self.width = g.width
             self.height = g.height
+            self.depth = g.depth
         return getattr(self, "_" + attr)
     return get_attr
 
@@ -312,9 +313,9 @@ class XWindow:
         """
         Parameters
         ==========
-        name : String Atom name
-        type : String Atom name
-        format : 8, 16, 32
+        name: String Atom name
+        type: String Atom name
+        format: 8, 16, 32
         """
         if name in xcbq.PropertyMap:
             if type or format:
@@ -427,10 +428,12 @@ class XWindow:
             parent = XWindow(self.conn, q.parent)
         return root, parent, [XWindow(self.conn, i) for i in q.children]
 
-    def paint_borders(self, colors, borderwidth, width, height):
+    def paint_borders(self, depth, colors, borderwidth, width, height):
         """
         This method is used only by the managing Window class.
         """
+        self.set_property('_NET_FRAME_EXTENTS', [borderwidth] * 4)
+
         if not colors or not borderwidth:
             return
 
@@ -447,7 +450,7 @@ class XWindow:
         with PixmapID(self.conn.conn) as pixmap:
             with GContextID(self.conn.conn) as gc:
                 core.CreatePixmap(
-                    self.conn.default_screen.root_depth, pixmap, self.wid, outer_w, outer_h
+                    depth, pixmap, self.wid, outer_w, outer_h
                 )
                 core.CreateGC(gc, pixmap, 0, None)
                 borders = len(colors)
@@ -464,15 +467,15 @@ class XWindow:
                     )
                     core.PolyFillRectangle(pixmap, gc, 1, [rect])
                     coord += borderwidths[i]
-                self._set_borderpixmap(pixmap, gc, borderwidth, width, height)
+                self._set_borderpixmap(depth, pixmap, gc, borderwidth, width, height)
 
-    def _set_borderpixmap(self, pixmap, gc, borderwidth, width, height):
+    def _set_borderpixmap(self, depth, pixmap, gc, borderwidth, width, height):
         core = self.conn.conn.core
         outer_w = width + borderwidth * 2
         outer_h = height + borderwidth * 2
         with PixmapID(self.conn.conn) as border:
             core.CreatePixmap(
-                self.conn.default_screen.root_depth, border, self.wid, outer_w, outer_h
+                depth, border, self.wid, outer_w, outer_h
             )
             most_w = outer_w - borderwidth
             most_h = outer_h - borderwidth
@@ -500,6 +503,7 @@ class _Window:
             self._y = g.y
             self._width = g.width
             self._height = g.height
+            self._depth = g.depth
         except xcffib.xproto.DrawableError:
             # Whoops, we were too early, so let's ignore it for now and get the
             # values on demand.
@@ -507,6 +511,7 @@ class _Window:
             self._y = None
             self._width = None
             self._height = None
+            self._depth = None
 
         self.float_x: Optional[int] = None
         self.float_y: Optional[int] = None
@@ -544,6 +549,10 @@ class _Window:
     height = property(
         fset=_geometry_setter("height"),
         fget=_geometry_getter("height"),
+    )
+    depth = property(
+        fset=_geometry_setter("depth"),
+        fget=_geometry_getter("depth"),
     )
 
     @property
@@ -643,7 +652,6 @@ class _Window:
 
         state = self.window.get_net_wm_state()
 
-        logger.debug('_NET_WM_STATE: %s', state)
         for s in triggered:
             setattr(self, s, (s in state))
 
@@ -695,6 +703,7 @@ class _Window:
 
     @property
     def opacity(self):
+        assert hasattr(self, "window")
         opacity = self.window.get_property(
             "_NET_WM_WINDOW_OPACITY", unpack=int
         )
@@ -707,12 +716,11 @@ class _Window:
             return as_float
 
     @opacity.setter
-    def opacity(self, opacity):
+    def opacity(self, opacity: float) -> None:
         if 0.0 <= opacity <= 1.0:
             real_opacity = int(opacity * 0xffffffff)
+            assert hasattr(self, "window")
             self.window.set_property('_NET_WM_WINDOW_OPACITY', real_opacity)
-        else:
-            return
 
     def kill(self):
         if "WM_DELETE_WINDOW" in self.window.get_wm_protocols():
@@ -741,7 +749,8 @@ class _Window:
     def hide(self):
         # We don't want to get the UnmapNotify for this unmap
         with self.disable_mask(EventMask.StructureNotify):
-            self.window.unmap()
+            with self.qtile.core.disable_unmap_events():
+                self.window.unmap()
         self.hidden = True
 
     def unhide(self):
@@ -765,6 +774,29 @@ class _Window:
             eventmask=self._window_mask
         )
 
+    def _grab_click(self):
+        # Grab button 1 to focus upon click when unfocussed
+        for amask in self.qtile.core._auto_modmasks():
+            self.qtile.core.conn.conn.core.GrabButton(
+                True,
+                self.window.wid,
+                EventMask.ButtonPress,
+                xcffib.xproto.GrabMode.Sync,
+                xcffib.xproto.GrabMode.Async,
+                xcffib.xproto.Atom._None,
+                xcffib.xproto.Atom._None,
+                1,
+                amask,
+            )
+
+    def _ungrab_click(self):
+        # Ungrab button 1 when focussed
+        self.qtile.core.conn.conn.core.UngrabButton(
+            xcffib.xproto.Atom.Any,
+            self.window.wid,
+            xcffib.xproto.ModMask.Any,
+        )
+
     def get_pid(self):
         return self.window.get_net_wm_pid()
 
@@ -775,16 +807,16 @@ class _Window:
 
         Parameters
         ==========
-        x : int
-        y : int
-        width : int
-        height : int
-        borderwidth : int
-        bordercolor : string
-        above : bool, optional
-        margin : int or list, optional
+        x: int
+        y: int
+        width: int
+        height: int
+        borderwidth: int
+        bordercolor: string
+        above: bool, optional
+        margin: int or list, optional
             space around window as int or list of ints [N E S W]
-        above : bool, optional
+        above: bool, optional
             If True, the geometry will be adjusted to respect hints provided by the
             client.
         """
@@ -870,7 +902,7 @@ class _Window:
         self.borderwidth = width
         self.bordercolor = color
         self.window.configure(borderwidth=width)
-        self.window.paint_borders(color, width, self.width, self.height)
+        self.window.paint_borders(self.depth, color, width, self.width, self.height)
 
     def send_configure_notify(self, x, y, width, height):
         """Send a synthetic ConfigureNotify"""
@@ -968,7 +1000,14 @@ class _Window:
                 state.remove(atom)
                 self.window.set_property('_NET_WM_STATE', state)
 
+        # re-grab button events on the previously focussed window
+        old = self.qtile.core._root.get_property("_NET_ACTIVE_WINDOW", 'WINDOW', unpack=int)
+        if old and old[0] in self.qtile.windows_map:
+            old_win = self.qtile.windows_map[old[0]]
+            if not isinstance(old_win, base.Internal):
+                old_win._grab_click()
         self.qtile.core._root.set_property("_NET_ACTIVE_WINDOW", self.window.wid)
+        self._ungrab_click()
 
         if self.group:
             self.group.current_window = self
@@ -1059,7 +1098,10 @@ class Internal(_Window, base.Internal):
         return Drawer(self.qtile, self, width, height)
 
     def kill(self):
-        self.qtile.core.conn.conn.core.DestroyWindow(self.window.wid)
+        if self.window.wid in self.qtile.windows_map:
+            # It will be present during config reloads; absent during shutdown as this
+            # will follow graceful_shutdown
+            self.qtile.core.conn.conn.core.DestroyWindow(self.window.wid)
 
     def cmd_kill(self):
         self.kill()
@@ -1105,29 +1147,15 @@ class Static(_Window, base.Static):
         self.conf_y = y
         self.conf_width = width
         self.conf_height = height
-        x = x or 0
-        y = y or 0
+        x = x or self.x
+        y = y or self.y
         self.x = x + screen.x
         self.y = y + screen.y
-        self.width = width or 0
-        self.height = height or 0
         self.screen = screen
-        self.place(self.x, self.y, self.width, self.height, 0, 0)
+        self.place(self.x, self.y, width or self.width, height or self.height, 0, 0)
+        self.unhide()
         self.update_strut()
-
-        # Grab button 1 to focus upon click
-        for amask in self.qtile.core._auto_modmasks():
-            self.qtile.core.conn.conn.core.GrabButton(
-                True,
-                self.window.wid,
-                EventMask.ButtonPress,
-                xcffib.xproto.GrabMode.Sync,
-                xcffib.xproto.GrabMode.Async,
-                xcffib.xproto.Atom._None,
-                xcffib.xproto.Atom._None,
-                1,
-                amask,
-            )
+        self._grab_click()
 
     def handle_ConfigureRequest(self, e):  # noqa: N802
         cw = xcffib.xproto.ConfigWindow
@@ -1208,38 +1236,12 @@ class Window(_Window, base.Window):
     def __init__(self, window, qtile):
         _Window.__init__(self, window, qtile)
         self.update_name()
-        # add to group by position according to _NET_WM_DESKTOP property
-        group = None
-        index = window.get_wm_desktop()
-        if index is not None and index < len(qtile.groups):
-            group = qtile.groups[index]
-        elif index is None:
-            transient_for = self.is_transient_for()
-            if transient_for is not None:
-                group = transient_for._group
-        if group is not None:
-            group.add(self)
-            self._group = group
-            if group != qtile.current_screen.group:
-                self.hide()
+        self.set_group()
 
         # add window to the save-set, so it gets mapped when qtile dies
         qtile.core.conn.conn.core.ChangeSaveSet(SetMode.Insert, self.window.wid)
         self.update_wm_net_icon()
-
-        # Grab button 1 to focus upon click
-        for amask in self.qtile.core._auto_modmasks():
-            self.qtile.core.conn.conn.core.GrabButton(
-                True,
-                self.window.wid,
-                EventMask.ButtonPress,
-                xcffib.xproto.GrabMode.Sync,
-                xcffib.xproto.GrabMode.Async,
-                xcffib.xproto.Atom._None,
-                xcffib.xproto.Atom._None,
-                1,
-                amask,
-            )
+        self._grab_click()
 
     @property
     def group(self):
@@ -1313,11 +1315,12 @@ class Window(_Window, base.Window):
             screen = self.group.screen or \
                 self.qtile.find_closest_screen(self.x, self.y)
 
+            bw = self.group.floating_layout.fullscreen_border_width
             self._enablefloating(
                 screen.x,
                 screen.y,
-                screen.width,
-                screen.height,
+                screen.width - 2 * bw,
+                screen.height - 2 * bw,
                 new_float_state=FloatStates.FULLSCREEN
             )
             set_state(prev_state, prev_state | atom)
@@ -1343,11 +1346,12 @@ class Window(_Window, base.Window):
             screen = self.group.screen or \
                 self.qtile.find_closest_screen(self.x, self.y)
 
+            bw = self.group.floating_layout.max_border_width
             self._enablefloating(
                 screen.dx,
                 screen.dy,
-                screen.dwidth,
-                screen.dheight,
+                screen.dwidth - 2 * bw,
+                screen.dheight - 2 * bw,
                 new_float_state=FloatStates.MAXIMIZED
             )
         else:
@@ -1397,6 +1401,7 @@ class Window(_Window, base.Window):
             self.group.remove(self)
         s = Static(self.window, self.qtile, screen, x, y, width, height)
         self.qtile.windows_map[self.window.wid] = s
+        self.qtile.core.update_client_list(self.qtile.windows_map)
         hook.fire("client_managed", s)
 
     def tweak_float(self, x=None, y=None, dx=0, dy=0,
@@ -1466,6 +1471,22 @@ class Window(_Window, base.Window):
             self.height = h
         self._reconfigure_floating(new_float_state=new_float_state)
 
+    def set_group(self):
+        # add to group by position according to _NET_WM_DESKTOP property
+        group = None
+        index = self.window.get_wm_desktop()
+        if index is not None and index < len(self.qtile.groups):
+            group = self.qtile.groups[index]
+        elif index is None:
+            transient_for = self.is_transient_for()
+            if transient_for is not None:
+                group = transient_for._group
+        if group is not None:
+            group.add(self)
+            self._group = group
+            if group != self.qtile.current_screen.group:
+                self.hide()
+
     def togroup(self, group_name=None, *, switch_group=False):
         """Move window to a specified group
 
@@ -1491,17 +1512,6 @@ class Window(_Window, base.Window):
             group.add(self)
             if switch_group:
                 group.cmd_toscreen(toggle=False)
-
-    def toscreen(self, index=None):
-        """Move window to a specified screen, or the current screen."""
-        if index is None:
-            screen = self.qtile.current_screen
-        else:
-            try:
-                screen = self.qtile.screens[index]
-            except IndexError:
-                raise CommandError('No such screen: %d' % index)
-        self.togroup(screen.group.name)
 
     def match(self, match):
         """Match window against given attributes.
@@ -1618,33 +1628,33 @@ class Window(_Window, base.Window):
         elif atoms["_NET_ACTIVE_WINDOW"] == opcode:
             source = data.data32[0]
             if source == 2:  # XCB_EWMH_CLIENT_SOURCE_TYPE_NORMAL
-                logger.info("Focusing window by pager")
+                logger.debug("Focusing window by pager")
                 self.qtile.current_screen.set_group(self.group)
                 self.group.focus(self)
             else:  # XCB_EWMH_CLIENT_SOURCE_TYPE_OTHER
                 focus_behavior = self.qtile.config.focus_on_window_activation
                 if focus_behavior == "focus":
-                    logger.info("Focusing window")
+                    logger.debug("Focusing window")
                     self.qtile.current_screen.set_group(self.group)
                     self.group.focus(self)
                 elif focus_behavior == "smart":
                     if not self.group.screen:
-                        logger.info("Ignoring focus request")
+                        logger.debug("Ignoring focus request")
                         return
                     if self.group.screen == self.qtile.current_screen:
-                        logger.info("Focusing window")
+                        logger.debug("Focusing window")
                         self.qtile.current_screen.set_group(self.group)
                         self.group.focus(self)
                     else:  # self.group.screen != self.qtile.current_screen:
-                        logger.info("Setting urgent flag for window")
+                        logger.debug("Setting urgent flag for window")
                         self.urgent = True
                 elif focus_behavior == "urgent":
-                    logger.info("Setting urgent flag for window")
+                    logger.debug("Setting urgent flag for window")
                     self.urgent = True
                 elif focus_behavior == "never":
-                    logger.info("Ignoring focus request")
+                    logger.debug("Ignoring focus request")
                 else:
-                    logger.warning("Invalid value for focus_on_window_activation: {}".format(focus_behavior))
+                    logger.debug("Invalid value for focus_on_window_activation: {}".format(focus_behavior))
         elif atoms["_NET_CLOSE_WINDOW"] == opcode:
             self.kill()
         elif atoms["WM_CHANGE_STATE"] == opcode:
@@ -1654,11 +1664,10 @@ class Window(_Window, base.Window):
             elif state == IconicState and self.qtile.config.auto_minimize:
                 self.minimized = True
         else:
-            logger.info("Unhandled client message: %s", atoms.get_name(opcode))
+            logger.debug("Unhandled client message: %s", atoms.get_name(opcode))
 
     def handle_PropertyNotify(self, e):  # noqa: N802
         name = self.qtile.core.conn.atoms.get_name(e.atom)
-        logger.debug("PropertyNotifyEvent: %s", name)
         if name == "WM_TRANSIENT_FOR":
             pass
         elif name == "WM_HINTS":
@@ -1694,16 +1703,19 @@ class Window(_Window, base.Window):
             # self.update_state()
             self.update_state()
         else:
-            logger.info("Unknown window property: %s", name)
+            logger.debug("Unknown window property: %s", name)
         return False
 
     def _items(self, name: str) -> ItemT:
         if name == "group":
             return True, []
-        elif name == "layout":
-            return True, list(range(len(self.group.layouts)))
-        elif name == "screen" and self.group.screen is not None:
-            return True, []
+        if name == "layout":
+            if self.group:
+                return True, list(range(len(self.group.layouts)))
+            return None
+        if name == "screen":
+            if self.group and self.group.screen:
+                return True, []
         return None
 
     def _select(self, name, sel):
@@ -1724,47 +1736,6 @@ class Window(_Window, base.Window):
         this, otherwise be brutal.
         """
         self.kill()
-
-    def cmd_togroup(self, groupName=None, *, switch_group=False):  # noqa: 803
-        """Move window to a specified group.
-
-        If groupName is not specified, we assume the current group.
-        If switch_group is True, also switch to that group.
-
-        Examples
-        ========
-
-        Move window to current group::
-
-            togroup()
-
-        Move window to group "a"::
-
-            togroup("a")
-
-        Move window to group "a", and switch to group "a"::
-
-            togroup("a", switch_group=True)
-        """
-        self.togroup(groupName, switch_group=switch_group)
-
-    def cmd_toscreen(self, index=None):
-        """Move window to a specified screen.
-
-        If index is not specified, we assume the current screen
-
-        Examples
-        ========
-
-        Move window to current screen::
-
-            toscreen()
-
-        Move window to screen 0::
-
-            toscreen(0)
-        """
-        self.toscreen(index)
 
     def cmd_move_floating(self, dx, dy):
         """Move window by dx and dy"""
@@ -1822,9 +1793,6 @@ class Window(_Window, base.Window):
             self.window.configure(stackmode=StackMode.Above)
         else:
             self._reconfigure_floating()  # atomatically above
-
-    def cmd_match(self, *args, **kwargs):
-        return self.match(*args, **kwargs)
 
     def _is_in_window(self, x, y, window):
         return (window.edges[0] <= x <= window.edges[2] and

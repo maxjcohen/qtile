@@ -39,15 +39,14 @@ class CurrentLayout(base._TextBox):
     Display the name of the current layout of the current group of the screen,
     the bar containing the widget, is on.
     """
-    orientations = base.ORIENTATION_HORIZONTAL
-
     def __init__(self, width=bar.CALCULATED, layouts_icons:dict=None, **config):
         super().__init__("", width, **config)
         self.layouts_icons = layouts_icons or {}
 
     def _configure(self, qtile, bar):
         base._TextBox._configure(self, qtile, bar)
-        self.text = self.bar.screen.group.layouts[0].name
+        layout_id = self.bar.screen.group.current_layout
+        self.text = self.bar.screen.group.layouts[layout_id].name
         try:
             self.text = self.layouts_icons[self.text]
         except KeyError:
@@ -118,7 +117,8 @@ class CurrentLayoutIcon(base._TextBox):
 
     def _configure(self, qtile, bar):
         base._TextBox._configure(self, qtile, bar)
-        self.text = self.bar.screen.group.layouts[0].name
+        layout_id = self.bar.screen.group.current_layout
+        self.text = self.bar.screen.group.layouts[layout_id].name
         self.current_layout = self.text
         self.icons_loaded = False
         self.icon_paths = []
@@ -154,7 +154,7 @@ class CurrentLayoutIcon(base._TextBox):
                 self.drawer.clear(self.background or self.bar.background)
                 self.drawer.ctx.set_source(surface)
                 self.drawer.ctx.paint()
-                self.drawer.draw(offsetx=self.offset, width=self.length)
+                self.drawer.draw(offsetx=self.offset, offsety=self.offsety, width=self.length)
         else:
             # Fallback to text
             self.text = self.current_layout[0].upper()

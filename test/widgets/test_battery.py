@@ -9,7 +9,7 @@ from libqtile.widget.battery import (
     BatteryState,
     BatteryStatus,
 )
-from test.widgets.conftest import TEST_DIR
+from test.widgets.conftest import TEST_DIR, FakeBar
 
 
 class DummyBattery:
@@ -215,3 +215,38 @@ def test_images_default(fake_bar):
     assert len(batt.surfaces) == len(BatteryIcon.icon_names)
     for name, surfpat in batt.surfaces.items():
         assert isinstance(surfpat, cairocffi.SurfacePattern)
+
+
+def test_battery_background(fake_qtile, fake_window, monkeypatch):
+    ok = BatteryStatus(
+        state=BatteryState.DISCHARGING,
+        percent=0.5,
+        power=15.,
+        time=1729,
+    )
+    low = BatteryStatus(
+        state=BatteryState.DISCHARGING,
+        percent=0.1,
+        power=15.,
+        time=1729,
+    )
+
+    low_background = "ff0000"
+    background = "000000"
+
+    with monkeypatch.context() as manager:
+        manager.setattr(battery, "load_battery", dummy_load_battery(ok))
+        batt = Battery(
+            low_percentage=0.2, low_background=low_background, background=background
+        )
+
+    fakebar = FakeBar([batt], window=fake_window)
+    batt._configure(fake_qtile, fakebar)
+
+    assert batt.background == background
+    batt._battery._status = low
+    batt.poll()
+    assert batt.background == low_background
+    batt._battery._status = ok
+    batt.poll()
+    assert batt.background == background

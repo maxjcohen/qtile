@@ -11,6 +11,7 @@ from libqtile import layout, utils
 from libqtile.backend.x11 import window, xcbq
 from test.conftest import dualmonitor
 from test.helpers import (
+    HEIGHT,
     SECOND_HEIGHT,
     SECOND_WIDTH,
     WIDTH,
@@ -497,6 +498,26 @@ def test_cursor_warp(xmanager):
     assert p.same_screen
 
 
+@dualmonitor
+def test_click_focus_screen(xmanager):
+    screen1 = (WIDTH // 2, HEIGHT // 2)
+    screen2 = (WIDTH + SECOND_WIDTH // 2, SECOND_HEIGHT // 2)
+    xmanager.c.eval(f"self.core.warp_pointer{screen1}")
+    assert xmanager.c.screen.info()["index"] == 0
+
+    # Warping alone shouldn't change the current screen
+    xmanager.c.eval(f"self.core.warp_pointer{screen2}")
+    assert xmanager.c.screen.info()["index"] == 0
+    # Clicking should
+    xmanager.backend.fake_click(*screen2)
+    assert xmanager.c.screen.info()["index"] == 1
+
+    xmanager.c.eval(f"self.core.warp_pointer{screen1}")
+    assert xmanager.c.screen.info()["index"] == 1
+    xmanager.backend.fake_click(*screen1)
+    assert xmanager.c.screen.info()["index"] == 0
+
+
 @bare_config
 def test_min_size_hint(xmanager):
     w = None
@@ -707,3 +728,36 @@ def test_multiple_borders(xmanager):
         next_avg = sum(color) / 3
         assert avg < next_avg
         avg = next_avg
+
+
+class NetFrameExtentsConfig(BareConfig):
+    layouts = [
+        layout.Columns(border_width=2, border_on_single=True),
+        layout.Columns(border_width=4, border_on_single=True),
+    ]
+    floating_layout = layout.Floating(border_width=6)
+
+
+@pytest.mark.parametrize("xmanager", [NetFrameExtentsConfig], indirect=True)
+def test_net_frame_extents(xmanager):
+    conn = xcbq.Connection(xmanager.display)
+
+    def assert_frame(wid, frame):
+        r = conn.conn.core.GetProperty(
+            False,
+            wid,
+            conn.atoms["_NET_FRAME_EXTENTS"],
+            conn.atoms["CARDINAL"],
+            0,
+            (2 ** 32) - 1
+        ).reply()
+        assert r.value.to_atoms() == frame
+
+    pid = xmanager.test_window("one")
+    wid = xmanager.c.window.info()["id"]
+    assert_frame(wid, (2, 2, 2, 2))
+    xmanager.c.next_layout()
+    assert_frame(wid, (4, 4, 4, 4))
+    xmanager.c.window.enable_floating()
+    assert_frame(wid, (6, 6, 6, 6))
+    xmanager.kill_window(pid)

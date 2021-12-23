@@ -16,8 +16,6 @@ def _all_sensors_names_correct(sensors):
 
 class NvidiaSensors(base.ThreadPoolText):
     """Displays temperature, fan speed and performance level Nvidia GPU."""
-
-    orientations = base.ORIENTATION_HORIZONTAL
     defaults = [
         (
             'format', '{temp}°C',
@@ -69,8 +67,11 @@ class NvidiaSensors(base.ThreadPoolText):
                 for gpu in self._get_sensors_data(command)
             ]
             for gpu in sensors_data:
-                if gpu.get('temp') and int(gpu['temp']) > self.threshold:
-                    self.foreground = self.foreground_alert
+                if gpu.get('temp'):
+                    if int(gpu['temp']) > self.threshold:
+                        self.foreground = self.foreground_alert
+                    else:
+                        self.foreground = self.foreground_normal
             return ' - '.join(
                 [self.format.format(**gpu) for gpu in sensors_data]
             )

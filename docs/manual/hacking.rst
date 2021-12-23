@@ -20,6 +20,7 @@ imagemagick>=6.8  imagemagick         ``test/test_images*`` (optional)
 gtk-layer-shell   libgtk-layer-shell0 Testing notification windows in Wayland (optional)
 dbus-launch       dbus-x11            Testing dbus-using widgets (optional)
 notifiy-send      libnotify-bin       Testing ``Notify`` widget (optional)
+xvfb              xvfb                Testing with X11 headless (optional)
 ================= =================== ==================================================
 
 .. _pytest: https://docs.pytest.org
@@ -38,7 +39,7 @@ both backends, specify as arguments to pytest:
     pytest --backend wayland  # Test just Wayland backend
     pytest --backend x11 --backend wayland  # Test both
 
-Testing with the X11 backend requires Xephyr_ in addition to the core
+Testing with the X11 backend requires Xephyr_ (and xvfb for headless mode) in addition to the core
 dependencies.
 
 
@@ -101,6 +102,30 @@ The ``make lint`` command will run a linter with our configuration over libqtile
 to ensure your patch complies with reasonable formatting constraints. We also
 request that git commit messages follow the
 `standard format <https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html>`_.
+
+Logging
+=======
+
+Logs are important to us because they are our best way to see what Qtile is
+doing when something abnormal happens. However, our goal is not to have as many
+logs as possible, as this hinders readability. What we want are relevant logs.
+
+To decide which log level to use, refer to the following scenarios:
+
+* ERROR: a problem affects the behavior of Qtile in a way that is noticeable to
+  the end user, and we can't work around it.
+* WARNING: a problem causes Qtile to operate in a suboptimal manner.
+* INFO: the state of Qtile has changed.
+* DEBUG: information is worth giving to help the developer better understand
+  which branch the process is in.
+
+Be careful not to overuse DEBUG and clutter the logs. No information should be
+duplicated between two messages.
+
+Also, keep in mind that any other level than DEBUG is aimed at users who don't
+necessarily have advanced programming knowledge; adapt your message
+accordingly. If it can't make sense to your grandma, it's probably meant to be
+a DEBUG message.
 
 Deprecation policy
 ==================

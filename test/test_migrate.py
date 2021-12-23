@@ -169,6 +169,40 @@ def test_pacman():
     check_migrate(orig, expected)
 
 
+def test_crypto():
+    orig = textwrap.dedent("""
+        from libqtile import bar
+        from libqtile.widget import BitcoinTicker
+
+        bar.Bar(
+            [
+                BitcoinTicker(crypto='BTC', format='BTC: {avg}'),
+                BitcoinTicker(format='{crypto}: {avg}', font='sans'),
+                BitcoinTicker(),
+                BitcoinTicker(currency='EUR', format='{avg}', foreground='ffffff'),
+            ],
+            30
+        )
+    """)
+
+    expected = textwrap.dedent("""
+        from libqtile import bar
+        from libqtile.widget import CryptoTicker
+
+        bar.Bar(
+            [
+                CryptoTicker(crypto='BTC'),
+                CryptoTicker( font='sans'),
+                CryptoTicker(),
+                CryptoTicker(currency='EUR', foreground='ffffff'),
+            ],
+            30
+        )
+    """)
+
+    check_migrate(orig, expected)
+
+
 def test_main():
     orig = textwrap.dedent("""
         def main(qtile):
@@ -211,6 +245,26 @@ def test_new_at_current_to_new_client_position():
             layout.MonadTall(border_focus='#ff0000', new_client_position='after_current'),
             layout.MonadWide(new_client_position='before_current', border_focus='#ff0000'),
         ]
+    """)
+
+    check_migrate(orig, expected)
+
+
+def test_windowtogroup_groupName_argument():  # noqa: N802
+    orig = textwrap.dedent("""
+        from libqtile.config import Key
+        from libqtile.lazy import lazy
+
+        k = Key([], 's', lazy.window.togroup(groupName="g"))
+        c = lambda win: win.cmd_togroup(groupName="g")
+    """)
+
+    expected = textwrap.dedent("""
+        from libqtile.config import Key
+        from libqtile.lazy import lazy
+
+        k = Key([], 's', lazy.window.togroup(group_name="g"))
+        c = lambda win: win.cmd_togroup(group_name="g")
     """)
 
     check_migrate(orig, expected)

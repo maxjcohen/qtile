@@ -61,8 +61,6 @@ class Backlight(base.InLoopPollText):
 
     filenames = {}  # type: Dict
 
-    orientations = base.ORIENTATION_HORIZONTAL
-
     defaults = [
         ('backlight_name', 'acpi_video0', 'ACPI name of a backlight device'),
         (
@@ -99,6 +97,11 @@ class Backlight(base.InLoopPollText):
             'Button4': partial(self.cmd_change_backlight, ChangeDirection.UP),
             'Button5': partial(self.cmd_change_backlight, ChangeDirection.DOWN),
         })
+
+    def finalize(self):
+        if self._future and not self._future.done():
+            self._future.cancel()
+        base.InLoopPollText.finalize(self)
 
     def _load_file(self, path):
         try:

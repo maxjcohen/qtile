@@ -3,9 +3,8 @@ Screens
 =======
 
 The ``screens`` configuration variable is where the physical screens, their
-associated ``bars``, and the ``widgets`` contained within the bars are defined.
-
-See :ref:`ref-widgets` for a listing of available widgets.
+associated ``bars``, and the ``widgets`` contained within the bars are defined
+(see :ref:`ref-widgets` for a listing of available widgets). 
 
 Example
 =======
@@ -48,6 +47,33 @@ entire window.
     In X11 backends, transparency will be disabled in a bar if the ``background``
     color is fully opaque.
 
+Users can add borders to the bar by using the ``border_width`` and
+``border_color`` parameters. Providing a single value sets the value for all
+four sides while sides can be customised individually by setting four values
+in a list (top, right, bottom, left) e.g. ``border_width=[2, 0, 2, 0]`` would
+draw a border 2 pixels thick on the top and bottom of the bar.
+
+
+Multiple Screens
+================
+
+You will see from the example above that ``screens`` is a list of individual
+``Screen`` objects. The order of the screens in this list should match the order
+of screens as seen by your display server.
+
+X11
+~~~
+
+You can view the current order of your screens by running ``xrandr --listmonitors``.
+
+Examples of how to set the order of your screens can be found on the
+`Arch wiki <https://wiki.archlinux.org/title/Multihead>`_.
+
+Wayland
+~~~~~~~
+
+The Wayland backend supports the wlr-output-management protocol for configuration of
+outputs by tools such as `Kanshi <https://github.com/emersion/kanshi>`_.
 
 Fake Screens
 ============
