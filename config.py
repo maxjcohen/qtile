@@ -109,8 +109,8 @@ keys = [
     Key([mod], "f", lazy.spawn("st -e sh -c '$(fzfmenu)'")),
     # Toogle between groups
     Key([mod], "Tab", lazy.screen.toggle_group()),
-    Key(["shift", "control"], "l", lazy.screen.next_group()),
-    Key(["shift", "control"], "h", lazy.screen.prev_group()),
+    Key(["shift", "control"], "k", lazy.screen.next_group()),
+    Key(["shift", "control"], "j", lazy.screen.prev_group()),
 ]
 
 
