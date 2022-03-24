@@ -196,6 +196,7 @@ keys.extend(
 # Layouts
 # ============================
 layouts = [
+    layout.Max(),
     layout.TileSingle(
         margin=10,
         border_focus=_WM["COLOR_FOCUS"],
@@ -203,7 +204,6 @@ layouts = [
         border_width=3,
     ),
     # layout.Columns(border_focus_stack='#d75f5f'),
-    layout.Max(),
     # Try more layouts by unleashing below layouts.
     # layout.Stack(num_stacks=2),
     # layout.Bsp(),
